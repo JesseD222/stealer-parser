@@ -19,11 +19,12 @@ from stealer_parser.parsing import (
     parse_system,
     retrieve_ip_only,
 )
+from stealer_parser.parsing.parsing_cookies import parse_cookie_file
 from stealer_parser.ply.src.ply.lex import LexError
 from stealer_parser.search_stealer_credits import search_stealer_name
 
-# Files containing useful information such as credentials and credits.
-FILENAMES_REGEX: str = r"(?i).*((password(?!cracker))|(system|information|userinfo)|(\bip)|(credits|copyright|read)).*\.txt"  # noqa: E501
+# Files containing useful information such as credentials, cookies and credits.
+FILENAMES_REGEX: str = r"(?i).*((password(?!cracker))|(system|information|userinfo)|(\bip)|(credits|copyright|read)|(cookies?)).*\.txt"  # noqa: E501
 # Let's break down this regex:
 #
 # (?i)       Case insensitive
@@ -33,6 +34,7 @@ FILENAMES_REGEX: str = r"(?i).*((password(?!cracker))|(system|information|userin
 #            Group 3: system|information -> compromised machine information
 #            Group 4: ip.txt -> IP address of the compromised machine.
 #            Group 5: credits|copyright|read -> stealer name
+#            Group 6: cookies/cookie -> browser cookie files
 # .*\.txt    Match any character except line terminators folled by a .txt
 #            extension.
 FILENAMES_PATTERN: Pattern[str] = compile(FILENAMES_REGEX)
@@ -45,6 +47,7 @@ class LogFileType(Enum):
     SYSTEM = 3
     IP = 4
     COPYRIGHT = 5
+    COOKIES = 6
 
 
 @dataclass
@@ -126,6 +129,8 @@ def generate_file_list(root: ArchiveWrapper) -> list[LogFile]:
                 log_type = LogFileType.IP
             elif matched.group(5):
                 log_type = LogFileType.COPYRIGHT
+            elif matched.group(6):
+                log_type = LogFileType.COOKIES
 
             files.append(LogFile(log_type, name, get_system_dir(name)))
 
@@ -172,6 +177,25 @@ def parse_file(
 
             case LogFileType.IP:
                 retrieve_ip_only(text, system_data)
+                
+            case LogFileType.COOKIES:
+                # Identify browser from file path
+                browser = None
+                filepath_lower = filename.lower()
+                if 'chrome' in filepath_lower:
+                    browser = 'Chrome'
+                elif 'firefox' in filepath_lower:
+                    browser = 'Firefox'
+                elif 'edge' in filepath_lower:
+                    browser = 'Edge'
+                elif 'opera' in filepath_lower:
+                    browser = 'Opera'
+                elif 'brave' in filepath_lower:
+                    browser = 'Brave'
+                
+                # Parse cookie file
+                cookies = parse_cookie_file(filename, browser)
+                system_data.cookies.extend(cookies)
 
     except (LexError, SyntaxError) as err:
         logger.error(f"Failed parsing file '{filename}': {err}")
