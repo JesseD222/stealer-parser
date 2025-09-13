@@ -1,7 +1,28 @@
+# High-Performance Async API
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 python-multipart==0.0.20
 aiofiles==24.1.0
+
+# Database and async support
+sqlalchemy==2.0.36
+asyncpg==0.30.0  # PostgreSQL async driver
+aiosqlite==0.20.0  # SQLite async driver
+alembic==1.14.0  # Database migrations
+
+# Redis and job queue
+redis[hiredis]==5.2.1
+rq==1.18.0
+celery==5.4.0  # Alternative task queue
+
+# Performance and monitoring
+psutil==6.1.0  # System monitoring
+prometheus-client==0.21.1  # Metrics
+structlog==24.6.0  # Structured logging
+
+# Security
+bcrypt==4.2.1  # Password hashing
+cryptography==44.0.0  # Encryption
 
 # Dependencies from existing stealer_parser
 coloredlogs==15.0.1

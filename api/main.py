@@ -1,33 +1,37 @@
 """
-FastAPI backend for stealer parser web interface.
-Provides REST API endpoints for file upload, processing, and result retrieval.
+High-performance FastAPI backend for stealer parser with async processing.
+Supports millions of records with database storage and Redis job queue.
 """
 import os
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any, List
+from datetime import datetime
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.background import BackgroundTasks
 import uvicorn
 
-# Import the existing stealer parser modules
+# Import async processing modules
+from .database import db_manager, ParseSession
+from .async_processor import async_processor, BackgroundWorker
+
+# Import existing stealer parser modules
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
-from stealer_parser.main import read_archive, process_archive
-from stealer_parser.models import Leak
-from stealer_parser.helpers import init_logger, EnhancedJSONEncoder
-import json
+from stealer_parser.helpers import init_logger
+from sqlalchemy.sql import text
 
 
-# FastAPI app initialization
+# FastAPI app initialization with async support
 app = FastAPI(
-    title="Stealer Parser API",
-    description="REST API for parsing infostealer malware logs",
-    version="1.0.0",
+    title="Stealer Parser API - High Performance",
+    description="Async REST API for parsing infostealer malware logs with database storage",
+    version="2.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
@@ -35,100 +39,100 @@ app = FastAPI(
 # CORS middleware for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Global storage for processing jobs (in production, use Redis or database)
-processing_jobs = {}
-
 # Logger setup
-logger = init_logger("StealerParserAPI", 1)
+logger = init_logger("AsyncStealerParserAPI", 2)
+
+# Background worker instance
+background_worker = None
 
 
-class ProcessingStatus:
-    def __init__(self, job_id: str):
-        self.job_id = job_id
-        self.status = "pending"  # pending, processing, completed, failed
-        self.progress = 0
-        self.current_step = ""
-        self.result = None
-        self.error = None
-
-
-async def process_file_background(
-    job_id: str, 
-    file_path: str, 
-    filename: str, 
-    password: Optional[str] = None
-):
-    """Background task to process uploaded archive file."""
-    job = processing_jobs[job_id]
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database and async processing on startup."""
+    logger.info("Initializing async stealer parser API...")
     
     try:
-        job.status = "processing"
-        job.current_step = "Reading archive"
-        job.progress = 10
+        # Initialize database
+        await db_manager.init_database()
+        logger.info("Database initialized successfully")
         
-        # Create leak object
-        leak = Leak(filename=filename)
+        # Initialize Redis and async processor
+        await async_processor.init_redis()
+        logger.info("Redis and async processor initialized")
         
-        # Read and process archive
-        with open(file_path, "rb") as file_handle:
-            from io import BytesIO
-            with BytesIO(file_handle.read()) as buffer:
-                job.current_step = "Opening archive"
-                job.progress = 20
-                
-                archive = read_archive(buffer, filename, password)
-                
-                job.current_step = "Processing archive contents"
-                job.progress = 40
-                
-                process_archive(logger, leak, archive)
-                
-                job.current_step = "Finalizing results"
-                job.progress = 90
-                
-                # Convert result to JSON-serializable format
-                job.result = json.loads(
-                    json.dumps(leak, cls=EnhancedJSONEncoder, ensure_ascii=False)
-                )
-                
-                job.progress = 100
-                job.status = "completed"
-                job.current_step = "Complete"
-                
-                archive.close()
-                
+        # Start background worker for job processing
+        global background_worker
+        background_worker = BackgroundWorker()
+        
+        # Note: In production, run workers as separate processes
+        # For demo, we'll start one worker in background
+        import asyncio
+        asyncio.create_task(background_worker.start_worker())
+        logger.info("Background worker started")
+        
     except Exception as e:
-        job.status = "failed"
-        job.error = str(e)
-        logger.error(f"Failed processing job {job_id}: {e}")
+        logger.error(f"Failed to initialize services: {e}")
+        raise
+
+
+@app.on_event("shutdown") 
+async def shutdown_event():
+    """Clean up resources on shutdown."""
+    logger.info("Shutting down async stealer parser API...")
     
-    finally:
-        # Clean up temporary file
-        try:
-            os.unlink(file_path)
-        except:
-            pass
+    if background_worker:
+        background_worker.stop_worker()
+    
+    await db_manager.close()
+    logger.info("Cleanup completed")
 
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "service": "stealer-parser-api"}
+    """Enhanced health check with database and Redis status."""
+    try:
+        # Check database connection
+        async with db_manager.get_session() as session:
+            await session.execute(text("SELECT 1"))
+        db_status = "healthy"
+        
+        # Check Redis connection
+        redis_status = await async_processor.get_job_status("health_check")
+        redis_status = "healthy"
+        
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy", 
+            "service": "async-stealer-parser-api",
+            "error": str(e)
+        }
+    
+    return {
+        "status": "healthy",
+        "service": "async-stealer-parser-api",
+        "version": "2.0.0",
+        "database": db_status,
+        "redis": redis_status,
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
 
 @app.post("/api/upload")
-async def upload_file(
-    background_tasks: BackgroundTasks,
+async def upload_file_async(
     file: UploadFile = File(...),
     password: Optional[str] = None
 ):
-    """Upload and process stealer archive file."""
+    """
+    Upload and queue stealer archive file for async processing.
+    Supports millions of records with database storage.
+    """
     
     # Validate file type
     allowed_extensions = ['.zip', '.rar', '.7z']
@@ -140,8 +144,8 @@ async def upload_file(
             detail=f"Invalid file type. Only {', '.join(allowed_extensions)} files are supported."
         )
     
-    # Validate file size (100MB limit)
-    max_size = 100 * 1024 * 1024  # 100MB
+    # Validate file size (500MB limit for high-performance version)
+    max_size = 500 * 1024 * 1024  # 500MB
     file.file.seek(0, 2)  # Seek to end
     file_size = file.file.tell()
     file.file.seek(0)  # Reset to beginning
@@ -149,11 +153,11 @@ async def upload_file(
     if file_size > max_size:
         raise HTTPException(
             status_code=400,
-            detail="File size too large. Maximum allowed size is 100MB."
+            detail="File size too large. Maximum allowed size is 500MB."
         )
     
-    # Generate job ID and create temporary file
-    job_id = str(uuid.uuid4())
+    # Generate session ID and create temporary file
+    session_id = str(uuid.uuid4())
     
     # Create temporary file
     temp_fd, temp_path = tempfile.mkstemp(suffix=file_extension)
@@ -164,22 +168,30 @@ async def upload_file(
             content = await file.read()
             temp_file.write(content)
         
-        # Initialize processing job
-        processing_jobs[job_id] = ProcessingStatus(job_id)
-        
-        # Start background processing
-        background_tasks.add_task(
-            process_file_background,
-            job_id,
-            temp_path,
-            file.filename or "unknown",
-            password
+        # Create parse session in database
+        await db_manager.create_parse_session(
+            session_id=session_id,
+            filename=file.filename or "unknown",
+            file_size=file_size,
+            metadata={"upload_ip": "127.0.0.1", "user_agent": "stealer-parser-web"}
         )
         
+        # Queue processing job
+        await async_processor.queue_processing_job(
+            session_id=session_id,
+            file_path=temp_path,
+            filename=file.filename or "unknown",
+            password=password
+        )
+        
+        logger.info(f"Queued processing for {file.filename} ({file_size} bytes)")
+        
         return {
-            "job_id": job_id,
-            "status": "accepted",
-            "message": "File uploaded successfully and processing started"
+            "session_id": session_id,
+            "status": "queued",
+            "message": "File uploaded successfully and queued for processing",
+            "file_size": file_size,
+            "estimated_processing_time": f"{max(30, file_size // 1000000)} seconds"
         }
         
     except Exception as e:
@@ -188,78 +200,278 @@ async def upload_file(
             os.unlink(temp_path)
         except:
             pass
+        logger.error(f"Upload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
 
-@app.get("/api/status/{job_id}")
-async def get_job_status(job_id: str):
-    """Get processing status for a job."""
+@app.get("/api/status/{session_id}")
+async def get_processing_status(session_id: str):
+    """Get real-time processing status from Redis and database."""
     
-    if job_id not in processing_jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    job = processing_jobs[job_id]
-    
-    response = {
-        "job_id": job_id,
-        "status": job.status,
-        "progress": job.progress,
-        "current_step": job.current_step
-    }
-    
-    if job.error:
-        response["error"] = job.error
-    
-    return response
+    try:
+        # Get status from Redis (real-time)
+        redis_status = await async_processor.get_job_status(session_id)
+        
+        if redis_status:
+            return {
+                "session_id": session_id,
+                "status": redis_status["status"],
+                "progress": redis_status["progress"], 
+                "current_step": redis_status["current_step"],
+                "updated_at": redis_status.get("updated_at"),
+                "processing_time": redis_status.get("processing_time"),
+                "error_message": redis_status.get("error_message")
+            }
+        
+        # Fallback to database status
+        async with db_manager.get_session() as session:
+            result = await session.execute(
+                text("SELECT status, progress, current_step, error_message "
+                     "FROM parse_sessions WHERE id = :session_id"),
+                {"session_id": session_id}
+            )
+            row = result.fetchone()
+            
+            if row:
+                return {
+                    "session_id": session_id,
+                    "status": row.status,
+                    "progress": row.progress or 0,
+                    "current_step": row.current_step or "Unknown",
+                    "error_message": row.error_message
+                }
+        
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    except Exception as e:
+        logger.error(f"Failed to get status for {session_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve status")
 
 
-@app.get("/api/result/{job_id}")
-async def get_job_result(job_id: str):
-    """Get processing result for a completed job."""
+@app.get("/api/result/{session_id}")
+async def get_processing_result(session_id: str):
+    """Get comprehensive processing results from database."""
     
-    if job_id not in processing_jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    job = processing_jobs[job_id]
-    
-    if job.status == "processing" or job.status == "pending":
-        raise HTTPException(status_code=202, detail="Job still processing")
-    
-    if job.status == "failed":
-        raise HTTPException(status_code=500, detail=job.error or "Processing failed")
-    
-    if job.status == "completed" and job.result:
-        return JSONResponse(content=job.result)
-    
-    raise HTTPException(status_code=500, detail="No result available")
+    try:
+        # Get results from database
+        results = await db_manager.get_session_results(session_id)
+        
+        if not results:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        session_data = results["session"]
+        
+        if session_data["status"] == "processing" or session_data["status"] == "pending":
+            raise HTTPException(status_code=202, detail="Processing still in progress")
+        
+        if session_data["status"] == "failed":
+            raise HTTPException(
+                status_code=500, 
+                detail=session_data.get("error_message", "Processing failed")
+            )
+        
+        if session_data["status"] == "completed":
+            # Format results for frontend compatibility
+            formatted_results = {
+                "filename": session_data["filename"],
+                "systems_data": []
+            }
+            
+            # Group data by system
+            systems_by_id = {}
+            for system in results["systems"]:
+                systems_by_id[system["id"]] = {
+                    "system": {
+                        "machine_id": system["machine_id"],
+                        "computer_name": system["computer_name"],
+                        "hardware_id": system["hardware_id"],
+                        "machine_user": system["machine_user"],
+                        "ip_address": system["ip_address"],
+                        "country": system["country"],
+                        "log_date": system["log_date"]
+                    },
+                    "credentials": [],
+                    "cookies": []
+                }
+            
+            # Add credentials to systems
+            for cred in results["credentials"]:
+                if cred["system_id"] in systems_by_id:
+                    systems_by_id[cred["system_id"]]["credentials"].append({
+                        "software": cred["software"],
+                        "host": cred["host"],
+                        "domain": cred["domain"],
+                        "username": cred["username"],
+                        "password": "***HIDDEN***",  # Don't expose passwords
+                        "email_domain": cred["email_domain"],
+                        "local_part": cred["local_part"],
+                        "filepath": cred["filepath"],
+                        "stealer_name": cred["stealer_name"],
+                        "risk_level": cred["risk_level"]
+                    })
+            
+            # Add cookies to systems
+            for cookie in results["cookies"]:
+                if cookie["system_id"] in systems_by_id:
+                    systems_by_id[cookie["system_id"]]["cookies"].append({
+                        "domain": cookie["domain"],
+                        "name": cookie["name"],
+                        "value": "***HIDDEN***",  # Don't expose cookie values
+                        "browser": cookie["browser"],
+                        "secure": cookie["secure"],
+                        "expiry": cookie["expiry"],
+                        "filepath": cookie["filepath"],
+                        "stealer_name": cookie["stealer_name"],
+                        "risk_level": cookie["risk_level"]
+                    })
+            
+            formatted_results["systems_data"] = list(systems_by_id.values())
+            
+            return JSONResponse(content=formatted_results)
+        
+        raise HTTPException(status_code=500, detail="Unknown session status")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get results for {session_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve results")
 
 
-@app.delete("/api/jobs/{job_id}")
-async def delete_job(job_id: str):
-    """Delete a processing job and clean up resources."""
+@app.get("/api/analytics/summary")
+async def get_analytics_summary():
+    """Get system-wide analytics and statistics."""
     
-    if job_id not in processing_jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    del processing_jobs[job_id]
-    
-    return {"message": "Job deleted successfully"}
+    try:
+        analytics = await db_manager.get_analytics_summary(limit=50)
+        return JSONResponse(content=analytics)
+        
+    except Exception as e:
+        logger.error(f"Failed to get analytics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve analytics")
 
 
-@app.get("/api/jobs")
-async def list_jobs():
-    """List all processing jobs (for admin/debugging)."""
+@app.get("/api/sessions")
+async def list_recent_sessions(
+    limit: int = Query(default=20, le=100),
+    status: Optional[str] = Query(default=None)
+):
+    """List recent processing sessions with optional status filter."""
     
-    jobs = []
-    for job_id, job in processing_jobs.items():
-        jobs.append({
-            "job_id": job_id,
-            "status": job.status,
-            "progress": job.progress,
-            "current_step": job.current_step
-        })
+    try:
+        async with db_manager.get_session() as session:
+            query = """
+                SELECT id, filename, file_size, upload_time, processing_start, 
+                       processing_end, status, progress, total_systems, 
+                       total_credentials, total_cookies
+                FROM parse_sessions 
+            """
+            params = {}
+            
+            if status:
+                query += " WHERE status = :status"
+                params["status"] = status
+            
+            query += " ORDER BY upload_time DESC LIMIT :limit"
+            params["limit"] = limit
+            
+            result = await session.execute(text(query), params)
+            sessions = [dict(row._mapping) for row in result.fetchall()]
+            
+            return {"sessions": sessions}
+        
+    except Exception as e:
+        logger.error(f"Failed to list sessions: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve sessions")
+
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_session(session_id: str):
+    """Delete a processing session and all related data."""
     
-    return {"jobs": jobs}
+    try:
+        async with db_manager.get_session() as session:
+            # Delete in order due to foreign key constraints
+            await session.execute(
+                text("DELETE FROM extracted_cookies WHERE session_id = :session_id"),
+                {"session_id": session_id}
+            )
+            await session.execute(
+                text("DELETE FROM extracted_credentials WHERE session_id = :session_id"),
+                {"session_id": session_id}
+            )
+            await session.execute(
+                text("DELETE FROM compromised_systems WHERE session_id = :session_id"),
+                {"session_id": session_id}
+            )
+            await session.execute(
+                text("DELETE FROM parse_sessions WHERE id = :session_id"),
+                {"session_id": session_id}
+            )
+        
+        return {"message": "Session deleted successfully"}
+        
+    except Exception as e:
+        logger.error(f"Failed to delete session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete session")
+
+
+@app.get("/api/export/{session_id}/csv")
+async def export_session_csv(session_id: str):
+    """Export session data as CSV file."""
+    
+    try:
+        results = await db_manager.get_session_results(session_id)
+        
+        if not results:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Generate CSV content
+        import io
+        import csv
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write credentials CSV
+        writer.writerow([
+            "Type", "Software", "Host", "Domain", "Username", "Risk Level", 
+            "Stealer", "System", "Country", "IP Address"
+        ])
+        
+        for cred in results["credentials"]:
+            # Find matching system
+            system = next(
+                (s for s in results["systems"] if s["id"] == cred["system_id"]), 
+                {}
+            )
+            
+            writer.writerow([
+                "Credential",
+                cred.get("software", ""),
+                cred.get("host", ""),
+                cred.get("domain", ""),
+                cred.get("username", ""),
+                cred.get("risk_level", ""),
+                cred.get("stealer_name", ""),
+                system.get("computer_name", ""),
+                system.get("country", ""),
+                system.get("ip_address", "")
+            ])
+        
+        csv_content = output.getvalue()
+        output.close()
+        
+        # Return as streaming response
+        return StreamingResponse(
+            io.StringIO(csv_content),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=stealer_data_{session_id}.csv"}
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to export CSV for {session_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to export data")
 
 
 if __name__ == "__main__":
