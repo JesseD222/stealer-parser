@@ -116,4 +116,4 @@ def search_stealer_name(text: str) -> StealerNameType | None:
     if DCRAT_HEADER in clean_text:
         return "dcrat"
 
-    return None
+    return "unknown"

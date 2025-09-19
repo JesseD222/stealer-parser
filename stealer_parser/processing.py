@@ -193,8 +193,19 @@ def parse_file(
                 elif 'brave' in filepath_lower:
                     browser = 'Brave'
                 
+                #Identify profile from file path
+                #/Browser/Profile/Cookies.txt
+                profile_start = filepath_lower.find('/profile/')
+                if profile_start != -1:
+                    profile_end = filepath_lower.find('/', profile_start + 9)
+                    if profile_end != -1:
+                        profile = filepath_lower[profile_start + 9:profile_end]
+                    else:
+                        profile = filepath_lower[profile_start + 9:]
+                profile = None
+
                 # Parse cookie file
-                cookies = parse_cookie_file(filename, browser)
+                cookies = parse_cookie_file(logger, filename, browser, profile or "unknown", text=text)
                 system_data.cookies.extend(cookies)
 
     except (LexError, SyntaxError) as err:

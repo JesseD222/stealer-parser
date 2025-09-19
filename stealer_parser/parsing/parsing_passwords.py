@@ -123,7 +123,7 @@ def get_browser_name(filename: str) -> str | None:
     -------
     str
         The browser filename if found. Otherwise, None.
-
+STARLINK[LOGS] v.6.zip
     """
     matched: Match[str] | None = search(PASSWORDS_BROWSER_REGEX, filename)
 

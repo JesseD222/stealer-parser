@@ -30,6 +30,8 @@ class Cookie:
         The cookie's value
     browser : str, optional
         The browser the cookie was extracted from
+    profile : str, optional
+        The browser profile the cookie was extracted from
     filepath : str, optional
         The cookie file path
     stealer_name : stealer_parser.models.types.StealerType, optional
@@ -37,12 +39,13 @@ class Cookie:
     """
 
     domain: str
-    domain_specified: bool
+    domain_specified: str
     path: str
-    secure: bool 
-    expiry: datetime
+    secure: str 
+    expiry: str
     name: str
     value: str
     browser: str | None = None
+    profile: str = "unknown"
     filepath: str | None = None
     stealer_name: StealerNameType | None = None
