@@ -101,6 +101,53 @@ def parse_options(description: str) -> Namespace:
         default=None,
         help="the output file name (expects a .json)",
     )
+    
+    # Database output options
+    parser.add_argument(
+        "--db-export",
+        action="store_true",
+        help="export data to PostgreSQL database instead of JSON",
+    )
+    parser.add_argument(
+        "--db-host",
+        metavar="HOST",
+        type=str,
+        default="localhost",
+        help="PostgreSQL server hostname (default: localhost)",
+    )
+    parser.add_argument(
+        "--db-port",
+        metavar="PORT",
+        type=int,
+        default=5432,
+        help="PostgreSQL server port (default: 5432)",
+    )
+    parser.add_argument(
+        "--db-name",
+        metavar="DATABASE",
+        type=str,
+        default="stealer_parser",
+        help="PostgreSQL database name (default: stealer_parser)",
+    )
+    parser.add_argument(
+        "--db-user",
+        metavar="USERNAME",
+        type=str,
+        default="postgres",
+        help="PostgreSQL username (default: postgres)",
+    )
+    parser.add_argument(
+        "--db-password",
+        metavar="PASSWORD",
+        type=str,
+        default="",
+        help="PostgreSQL password (default: empty)",
+    )
+    parser.add_argument(
+        "--db-create-tables",
+        action="store_true",
+        help="create database tables if they don't exist",
+    )
     parser.add_argument(
         "-v",
         "--verbose",
@@ -112,8 +159,12 @@ def parse_options(description: str) -> Namespace:
 
     args: Namespace = parser.parse_args()
 
-    if not args.outfile:
+    # Validate arguments
+    if not args.db_export and not args.outfile:
         args.outfile = Path(args.filename).with_suffix(".json").name
+    
+    if args.db_export and args.outfile:
+        parser.error("Cannot specify both --outfile and --db-export")
 
     return args
 

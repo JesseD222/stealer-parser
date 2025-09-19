@@ -1,5 +1,6 @@
 """Module that contains data models."""
 from .archive_wrapper import ArchiveWrapper
+from .cookie import Cookie
 from .credential import (
     Credential,
     extract_credential_domain_name,

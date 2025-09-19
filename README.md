@@ -20,7 +20,14 @@ This tool takes a **logs archive**, parses it, and produces a JSON file.
 - Accepts the following **archive formats**: `.rar`, `.zip`, `.7z`.
   Please note that multi-parts ZIP files aren't handled yet.
 - Parses files containing credentials and information about compromised systems.
-- Outputs result as **JSON**.
+- Outputs result as **JSON** or **PostgreSQL database**.
+
+### Output Options
+
+- **JSON Export** (default): Structured JSON files for easy integration
+- **PostgreSQL Database**: Direct export to PostgreSQL for advanced querying and analysis
+
+See [Database Export Documentation](docs/database_export.md) for detailed database setup and usage instructions.
 
 ### Result
 
@@ -123,6 +130,24 @@ Choose output file name:
 
 ```console
 $ stealer_parser myfile.zip --outfile results/foo.json
+```
+
+### Database Export
+
+Export directly to PostgreSQL database:
+
+```console
+$ stealer_parser myfile.rar --db-export --db-create-tables
+2024-07-08 13:37:00 - StealerParser - INFO - Processing: myfile.rar ...
+2024-07-08 13:37:00 - StealerParser - INFO - Creating database tables...
+2024-07-08 13:37:00 - StealerParser - INFO - Exporting myfile.rar to database...
+2024-07-08 13:37:01 - StealerParser - INFO - Database export completed successfully: 983 systems, 15420 credentials, 8932 cookies exported
+```
+
+With custom database connection:
+
+```console
+$ stealer_parser myfile.zip --db-export --db-host 192.168.1.100 --db-user analyst --db-password secret
 ```
 
 ## Documentation

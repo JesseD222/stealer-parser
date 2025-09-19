@@ -63,7 +63,7 @@ def parse_cookie(logger: VerboseLogger,
         
     return cookie
 
-def parse_cookies(
+def parse_cookie_file(
     logger: VerboseLogger, filename: str, 
     browser: str | None, 
     profile: str | None,

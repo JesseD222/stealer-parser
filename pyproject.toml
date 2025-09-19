@@ -11,6 +11,9 @@ coloredlogs = "^15.0.1"
 py7zr = "^0.21.0"
 rarfile = "^4.2"
 verboselogs = "^1.7"
+psycopg2-binary = "^2.9.9"
+dependency-injector = "^4.48.1"
+pydantic-settings = "^2.10.1"
 
 [tool.poetry.scripts]
 stealer_parser = "stealer_parser.main:main"
