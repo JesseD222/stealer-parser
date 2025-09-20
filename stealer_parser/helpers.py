@@ -126,21 +126,21 @@ def parse_options(description: str) -> Namespace:
         "--db-name",
         metavar="DATABASE",
         type=str,
-        default="stealer_parser",
+        default="derp",
         help="PostgreSQL database name (default: stealer_parser)",
     )
     parser.add_argument(
         "--db-user",
         metavar="USERNAME",
         type=str,
-        default="postgres",
+        default="derp",
         help="PostgreSQL username (default: postgres)",
     )
     parser.add_argument(
         "--db-password",
         metavar="PASSWORD",
         type=str,
-        default="",
+        default="disforderp",
         help="PostgreSQL password (default: empty)",
     )
     parser.add_argument(
@@ -171,7 +171,7 @@ def parse_options(description: str) -> Namespace:
 
 def init_logger(
     name: str,
-    verbosity_level: int,
+    verbosity_level: str,
     formatting: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 ) -> VerboseLogger:
     """Initialize the program's logger.
@@ -196,7 +196,7 @@ def init_logger(
 
     coloredlogs.install(
         logger=logger,
-        level=levels[max(min(verbosity_level, len(levels) - 1), 0)],
+        level=verbosity_level,
         fmt=formatting,
         isatty=True,
     )

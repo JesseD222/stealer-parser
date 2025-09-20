@@ -1,25 +1,18 @@
 """Infostealer logs parser."""
 from argparse import Namespace
+from typing import Optional
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
-
+from dependency_injector.wiring import inject, Provide
 from py7zr import SevenZipFile
 from rarfile import RarFile
 from verboselogs import VerboseLogger
-from stealer_parser.containers import Container
-from stealer_parser.helpers import dump_to_file, init_logger, parse_options
+from stealer_parser.containers import AppContainer
+from stealer_parser.database.postgres import PostgreSQLExporter
+from stealer_parser.helpers import parse_options
 from stealer_parser.models import ArchiveWrapper, Leak
-from stealer_parser.processing import process_archive
-
-# Import database components with fallback
-try:
-    from stealer_parser.database import PostgreSQLExporter
-    DATABASE_AVAILABLE = True
-except ImportError:
-    PostgreSQLExporter = None  # type: ignore
-    DATABASE_AVAILABLE = False
-
+from stealer_parser.services.leak_processor import LeakProcessor
 
 def read_archive(
     buffer: BytesIO, filename: str, password: str | None
@@ -68,31 +61,23 @@ def read_archive(
 
     return ArchiveWrapper(archive, filename=filename, password=password)
 
-
-def main() -> None:
+@inject
+def main(
+    db_exporter: PostgreSQLExporter = Provide[AppContainer.services.postgres_exporter],
+    logger: VerboseLogger = Provide[AppContainer.logger],
+    leak_processor: "LeakProcessor" = Provide[AppContainer.leak_processor],
+) -> None:
     """Program's entrypoint."""
     args: Namespace = parse_options("Parse infostealer logs archives.")
 
-    
-    # Initialize DI container and override config with CLI args
-    container = Container()
-    container.config.db_host.override(args.db_host)
-    container.config.db_port.override(args.db_port)
-    container.config.db_name.override(args.db_name)
-    container.config.db_user.override(args.db_user)
-    container.config.db_password.override(args.db_password)
-
-    logger = container.logger()
-    
     archive: ArchiveWrapper | None = None
+    leak: Leak | None = None
 
     try:
-        leak = Leak(filename=args.filename)
-
         with open(args.filename, "rb") as file_handle:
             with BytesIO(file_handle.read()) as buffer:
                 archive = read_archive(buffer, args.filename, args.password)
-                process_archive(logger, leak, archive)
+                leak = leak_processor.process_leak(archive)
 
     except (
         FileNotFoundError,
@@ -106,45 +91,19 @@ def main() -> None:
         logger.error(f"Failed parsing {args.filename}: {err}")
 
     else:
-        # Export data based on user preference
-        if args.db_export:
-            export_to_database(logger, leak, args, container)
-        else:
-            dump_to_file(logger, args.outfile, leak)
+        if leak:
+                export_to_database(db_exporter=db_exporter, logger=logger, leak=leak, args=args)
 
     finally:
         if archive:
             archive.close()
 
-
-def validate_database_config(args: Namespace) -> bool:
-    """Validate database configuration parameters.
-    
-    Parameters
-    ----------
-    args : Namespace
-        Command-line arguments with database parameters.
-    
-    Returns
-    -------
-    bool
-        True if configuration is valid, False otherwise.
-    
-    """
-    required_fields = ['db_host', 'db_port', 'db_name', 'db_user']
-    
-    for field in required_fields:
-        if not hasattr(args, field) or getattr(args, field) is None:
-            return False
-    
-    # Validate port number
-    if not isinstance(args.db_port, int) or args.db_port <= 0 or args.db_port > 65535:
-        return False
-    
-    return True
-
-
-def export_to_database(logger: VerboseLogger, leak: Leak, args: Namespace, container: Container) -> None:
+def export_to_database(
+    db_exporter: PostgreSQLExporter,
+    logger: VerboseLogger,
+    leak: Leak,
+    args: Namespace
+) -> None:
     """Export leak data to PostgreSQL database.
     
     Parameters
@@ -159,17 +118,7 @@ def export_to_database(logger: VerboseLogger, leak: Leak, args: Namespace, conta
         The dependency injection container.
     
     """
-    if not DATABASE_AVAILABLE:
-        logger.error(
-            "Database export requested but psycopg2 is not installed. "
-            "Install it with: pip install psycopg2-binary"
-        )
-        return
-    
     try:
-        # Get database exporter from the container
-        db_exporter = container.postgres_exporter()
-        
         # Test connection
         with db_exporter:
             if not db_exporter.test_connection():
@@ -179,7 +128,7 @@ def export_to_database(logger: VerboseLogger, leak: Leak, args: Namespace, conta
             # Create tables if requested
             if args.db_create_tables:
                 logger.info("Creating database tables...")
-                db_exporter.create_tables()
+                db_exporter.recreate_schema()
             
             # Export the leak data
             logger.info(f"Exporting {args.filename} to database...")
@@ -197,4 +146,18 @@ def export_to_database(logger: VerboseLogger, leak: Leak, args: Namespace, conta
 
 
 if __name__ == "__main__":
-    main()
+    # Initialize DI container
+    app_container = AppContainer()
+
+    app_container.wire(modules=[__name__])
+    # Initialize resources (e.g., DB pool)
+    app_container.init_resources()
+    try:
+        # Resolve dependencies explicitly to avoid unresolved Provide objects
+        logger = app_container.logger()
+        leak_processor = app_container.leak_processor()
+        db_exporter = app_container.services.postgres_exporter()
+        main(logger=logger, leak_processor=leak_processor, db_exporter=db_exporter)
+    finally:
+        # Ensure resources are cleaned up
+        app_container.shutdown_resources()

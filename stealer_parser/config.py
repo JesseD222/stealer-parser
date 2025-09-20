@@ -1,6 +1,7 @@
 """Centralized configuration management using Pydantic Settings."""
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import List
 
 
 class Settings(BaseSettings):
@@ -25,6 +26,11 @@ class Settings(BaseSettings):
     db_name: str = "derp"
     db_user: str = "derp"
     db_password: str = "disforderp"
+
+    # Parser feature flags and configuration
+    prefer_definition_parsers: bool = False
+    record_definitions_dirs: List[str] = ["record_definitions"]
+    parser_match_threshold: float = 0.15
     
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding='utf-8', extra='ignore')
 

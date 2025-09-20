@@ -1,98 +1,48 @@
-# Copilot Instructions for Stealer Parser
+# Stealer-Parser AI Coding Conventions
 
-## Project Overview
+This document provides guidance for AI agents to effectively contribute to the `stealer-parser` codebase.
 
-This is an infostealer malware logs parser that extracts credentials and system information from compressed archives (`.rar`, `.zip`, `.7z`). It uses PLY (Python Lex-Yacc) for lexical analysis and parsing of unstructured log files.
+## Architecture Overview
 
-## Architecture
+The application is a command-line tool that parses information stealer log archives (`.zip`, `.rar`, `.7z`) and extracts structured data (credentials, system info). The core architecture relies on dependency injection, a pluggable parsing system, and services for processing and exporting data.
 
-### Core Components
+- **Entrypoint**: `stealer_parser/main.py` handles CLI arguments, file reading, and orchestrates the main workflow.
+- **Dependency Injection**: The project uses the `dependency-injector` library. All major components are wired together in `stealer_parser/containers.py`. The main container is `AppContainer`. When adding new services or components, they should be registered here.
+- **Parsing Engine**: The parsing logic is central to this project. It uses `PLY` (Python Lex-Yacc) for lexing and parsing.
+    - **Parsers**: Individual parsers are located in `stealer_parser/parsing/parsers/`. Each parser is responsible for a specific log file format.
+    - **Grammars**: The grammars that `PLY` uses are defined as docstrings within the parser classes (e.g., `p_credentials`, `p_error`).
+    - **Parser Registry**: `stealer_parser/parsing/registry.py` automatically discovers and registers all available parsers. New parsers must inherit from `stealer_parser.parsing.parser.Parser` to be registered.
+- **Services**: Business logic is encapsulated in services within the `stealer_parser/services/` directory.
+    - `LeakProcessor`: Orchestrates the parsing of an entire archive by iterating through its files and delegating to the `ParserRegistry` to find the appropriate parser.
+    - `PostgreSQLExporter`: Handles exporting the parsed data to a PostgreSQL database.
+- **Data Models**: `Pydantic` models are used for data structures. Key models like `Credential`, `System`, and `Leak` are in `stealer_parser/models/`.
+- **Configuration**: Application settings are managed via `pydantic-settings` in `stealer_parser/config.py`.
 
-- **Main Entry Point**: `stealer_parser/main.py` - handles archive reading and orchestrates processing
-- **Processing Engine**: `stealer_parser/processing.py` - identifies file types via regex patterns and routes to appropriate parsers
-- **Data Models**: `stealer_parser/models/` - dataclasses for `Credential`, `System`, `Cookie`, and `Leak` structures
-- **PLY Parser System**: `stealer_parser/parsing/` - lexers and parsers for extracting structured data from unformatted logs
-- **Archive Wrapper**: `stealer_parser/models/archive_wrapper.py` - unified interface for different archive formats
+## Developer Workflow
 
-### Data Flow
+- **Setup**: The project uses `Poetry` for dependency management.
+  1.  Install dependencies: `poetry install`
+  2.  Activate virtual environment: `poetry shell`
 
-1. Archive files are opened via format-specific handlers (`RarFile`, `ZipFile`, `SevenZipFile`)
-2. Files matching `FILENAMES_REGEX` in `processing.py` are categorized by type (passwords, system, cookies, etc.)
-3. Text files are processed by appropriate parsers:
-   - Credentials: PLY lexers (`lexer_passwords.py`, `lexer_system.py`) for complex parsing
-   - Cookies: Direct Netscape cookie jar format parsing (`parsing_cookies.py`)
-4. Parsed data is converted to structured data models (`Credential`, `System`, `Cookie`)
-5. Results are aggregated into a `Leak` object and exported as JSON
+- **Running the tool**: The main script can be run directly.
+  ```bash
+  stealer_parser <archive_file> [options]
+  ```
 
-## Key Patterns
+- **Testing**: The project uses `pytest`.
+  - Run all tests: `poetry run pytest`
+  - Test files are located in the `tests/` directory and follow the `test_*.py` naming convention.
 
-### PLY Integration
+## Key Conventions
 
-- **Custom Lexers**: Use PLY's token-based approach with regex patterns for complex log formats (passwords, system info)
-- **Direct Parsers**: Simple tab-delimited formats like Netscape cookies use direct string parsing
-- **Grammar Files**: Documentation in `docs/grammar_*.txt` defines formal grammars for PLY-based parsers
-- **Parser Classes**: `LogsParser` in `parsing/parser.py` converts tokens to structured objects
-
-### Cookie Processing
-
-- **Netscape Format**: Follows standard 7-field tab-delimited cookie jar format
-- **Browser Detection**: Automatically identifies browser type from file path patterns
-- **Profile Extraction**: Attempts to extract browser profile from directory structure
-- **Error Resilience**: Gracefully handles malformed cookie entries
-
-### File Type Detection
-
-```python
-# Central regex pattern for identifying relevant files
-FILENAMES_REGEX: str = r"(?i).*((password(?!cracker))|(system|information|userinfo)|(\bip)|(credits|copyright|read)|(cookies?)).*\.txt"
-```
-
-### Error Handling Strategy
-
-- Unparseable files are saved to `logs/` directory with `.log` error files
-- Archive extraction errors are caught at the main level
-- PLY `LexError` exceptions are handled gracefully during parsing
-
-## Development Workflows
-
-### Running the Parser
-```bash
-poetry shell
-stealer_parser myfile.rar -vvv  # verbose output for debugging
-stealer_parser myfile.zip --password secret --outfile results.json
-```
-
-### Testing & Development
-```bash
-poetry install
-poetry shell
-pre-commit install  # Sets up code quality hooks
-```
-
-### Adding New Stealer Support
-
-1. Update lexer patterns in `stealer_parser/parsing/lexer_*.py`
-2. Extend grammar rules following patterns in `docs/grammar_*.txt`
-3. Add stealer name detection in `search_stealer_credits.py`
-4. Update `StealerNameType` enum in `models/types.py`
-
-## Project-Specific Conventions
-
-- **Dataclass Models**: All data structures use `@dataclass` with optional fields defaulting to `None`
-- **Type Aliases**: Used extensively (e.g., `StealerNameType`, `TokenType`)
-- **Path Handling**: Use `pathlib.Path` objects, not string manipulation
-- **Logging**: `VerboseLogger` with levels: info (-v), verbose (-vv), debug (-vvv), spam
-- **JSON Export**: Custom `EnhancedJSONEncoder` handles dataclasses and datetime objects
-
-## External Dependencies
-
-- **PLY**: Embedded as submodule in `stealer_parser/ply/` - modify lexer/parser files here
-- **Archive Libraries**: `py7zr`, `rarfile` for format-specific extraction
-- **Poetry**: Dependency management and CLI script registration
-
-## Common Debugging
-
-- Add `dump_to_file()` calls in `helpers.py` to save intermediate parsing states
-- Use `-vvv` flag to see detailed token processing
-- Check `logs/parsing/` for files that failed to parse
-- PLY generates `parser.out` and `parsetab.py` files for debugging grammar issues
+- **Dependency Injection**: Do not instantiate classes directly. Instead, inject them using the containers defined in `stealer_parser/containers.py`. Use `@inject` decorators on functions and methods that require dependencies.
+- **Creating New Parsers**:
+  1.  Create a new file in `stealer_parser/parsing/parsers/`.
+  2.  Define a class that inherits from `stealer_parser.parsing.parser.Parser`.
+  3.  Set the `tokens` class attribute.
+  4.  Implement lexer rules as methods with names like `t_WORD`.
+  5.  Implement yacc grammar rules as methods with names like `p_rule`. The docstring of the method defines the grammar.
+  6.  The parser will be automatically registered.
+- **Error Handling**: Parsers should handle parsing errors in a `p_error` method. The `LeakProcessor` will catch exceptions and log them.
+- **Database Interaction**: Database logic is handled through Data Access Objects (DAOs) in `stealer_parser/database/dao/`. When adding new database interactions, create or update a DAO. All database components are managed in `stealer_parser/database/postgres.py` and the `DatabaseContainer`.
+- **Logging**: A `VerboseLogger` instance is injected from the `AppContainer`. Use this logger for all logging.

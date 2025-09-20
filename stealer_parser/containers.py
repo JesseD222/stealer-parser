@@ -1,49 +1,142 @@
 """Dependency injection containers for the stealer-parser application."""
 
-from dependency_injector import containers, providers
-from psycopg2.pool import SimpleConnectionPool
+from __future__ import annotations
+from typing import Annotated
 
-from stealer_parser.config import Settings
+from dependency_injector import containers, providers
 from verboselogs import VerboseLogger
 
-from .database.postgres import PostgreSQLExporter
-from .credential_cookie_matcher import CredentialCookieMatcher
+from stealer_parser.config import Settings
+from stealer_parser.database.dao.base import (
+    CookiesDAO,
+    CredentialsDAO,
+    LeaksDAO,
+    SystemsDAO,
+)
+from stealer_parser.database.dao.credential_cookie import CredentialCookieDAO
+from stealer_parser.database.postgres import PostgreSQLExporter
+from stealer_parser.services.credential_cookie_matcher import CredentialCookieMatcher
+from stealer_parser.services.leak_processor import LeakProcessor
+from stealer_parser.parsing.registry import ParserRegistry
+from stealer_parser.helpers import init_logger
+from pathlib import Path
+
+# New imports for definition-driven parser
+from stealer_parser.parsing.definition_store import DefinitionStore
+from stealer_parser.parsing.factory import StrategyRegistry, ParserFactory, Chunker, Extractor, Transformer
+from stealer_parser.parsing.strategies.defaults import (
+    RegexSeparatorChunker,
+    KVHeaderExtractor,
+    AliasGroupingTransformer,
+)
 
 
-class Container(containers.DeclarativeContainer):
-    """Main DI container for the application."""
-    
-    # Configuration provider
-    config = providers.Configuration(pydantic_settings=[Settings()])
-    
-    logger = providers.Singleton(
-        VerboseLogger,
-        name="StealerParser",
-        verbosity_level=1,  # Default verbosity level; can be overridden
-    )
+try:
+    import psycopg2
+    import psycopg2.pool
+except ImportError:  # pragma: no cover - optional dependency
+    psycopg2 = None
 
-    # Database connection pool provider
+
+class DatabaseContainer(containers.DeclarativeContainer):
+    """Container for database-related components."""
+
+    config = providers.Dependency(instance_of=Settings)
+    logger = providers.Dependency(instance_of=VerboseLogger)
+
     db_pool = providers.Singleton(
-        SimpleConnectionPool,
+        psycopg2.pool.SimpleConnectionPool,
         minconn=1,
         maxconn=10,
-        host=config.provided['db_host'],
-        port=config.provided['db_port'],
-        database=config.provided['db_name'],
-        user=config.provided['db_user'],
-        password=config.provided['db_password'],
-    )
-    
-    # Service providers
-    postgres_exporter = providers.Factory(
-        PostgreSQLExporter,
-        db_pool=db_pool,
-    )
-    
-    credential_cookie_matcher = providers.Factory(
-        CredentialCookieMatcher,
-        db_pool=db_pool,
+        host=config.provided.db_host,
+        port=config.provided.db_port,
+        dbname=config.provided.db_name,
+        user=config.provided.db_user,
+        password=config.provided.db_password,
+    ) if psycopg2 else providers.Object(None)
+
+    leaks_dao = providers.Factory(LeaksDAO, db_pool=db_pool, logger=logger)
+    systems_dao = providers.Factory(SystemsDAO, db_pool=db_pool, logger=logger)
+    credentials_dao = providers.Factory(CredentialsDAO, db_pool=db_pool, logger=logger)
+    cookies_dao = providers.Factory(CookiesDAO, db_pool=db_pool, logger=logger)
+    credential_cookie_dao = providers.Factory(
+        CredentialCookieDAO, db_pool=db_pool, logger=logger
     )
 
-# Create a single container instance to be used by the application
-container = Container()
+
+class ServicesContainer(containers.DeclarativeContainer):
+    """Container for application services."""
+
+    config = providers.Dependency(instance_of=Settings)
+    logger = providers.Dependency(instance_of=VerboseLogger)
+    database = providers.DependenciesContainer()
+
+    postgres_exporter = providers.Factory(
+        PostgreSQLExporter,
+        db_pool=database.db_pool,
+        leaks_dao=database.leaks_dao,
+        systems_dao=database.systems_dao,
+        credentials_dao=database.credentials_dao,
+        cookies_dao=database.cookies_dao,
+        logger=logger,
+    )
+
+    credential_cookie_matcher = providers.Factory(
+        CredentialCookieMatcher,
+        credential_cookie_dao=database.credential_cookie_dao,
+        logger=logger,
+    )
+
+
+class AppContainer(containers.DeclarativeContainer):
+    """Main application container."""
+
+    config = providers.Singleton(Settings)
+    logger = providers.Singleton(init_logger, "stealer_parser",
+                                 "verbosity_level=INFO")
+
+    database = providers.Container(
+        DatabaseContainer,
+        config=config,
+        logger=logger,
+    )
+
+    services = providers.Container(
+        ServicesContainer,
+        config=config,
+        logger=logger,
+        database=database,
+    )
+
+    # Strategy registry and parser factory
+    strategy_registry = providers.Singleton(StrategyRegistry)
+    parser_factory = providers.Singleton(ParserFactory, strategies=strategy_registry)
+
+    # Definition store: directory configurable via settings
+    definition_store = providers.Singleton(
+        DefinitionStore,
+        base_dirs=providers.Callable(lambda cfg: [Path(p) for p in getattr(cfg, "record_definitions_dirs", ["record_definitions"])], config),
+    )
+
+    # Ensure default strategies are registered during init_resources()
+    strategies_initializer = providers.Resource(
+        lambda reg: (
+            reg.register(Chunker, RegexSeparatorChunker()),
+            reg.register(Extractor, KVHeaderExtractor()),
+            reg.register(Transformer, AliasGroupingTransformer()),
+        ),
+        strategy_registry,
+    )
+
+    parser_registry = providers.Singleton(
+        ParserRegistry,
+        logger=logger,
+        definition_store=definition_store,
+        parser_factory=parser_factory,
+    )
+
+    leak_processor = providers.Factory(
+        LeakProcessor,
+        parser_registry=parser_registry,
+        logger=logger,
+    )

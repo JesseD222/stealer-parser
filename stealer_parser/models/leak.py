@@ -62,10 +62,13 @@ class Leak:
     ----------
     filename : str
         The archive file name.
-    systems_data : list of stealer_parser.models.leak.SystemData, optional
-        Credentials grouped by compromised system.
+    systems : list of SystemData
+        The list of compromised systems.
+    stealer_name : StealerNameType, optional
+        The name of the stealer.
 
     """
 
-    filename: str | None = None
-    systems_data: list[SystemData] = field(default_factory=list)
+    filename: str
+    systems: list[SystemData] = field(default_factory=list)
+    stealer_name: StealerNameType | None = None
