@@ -90,6 +90,7 @@ class ServicesContainer(containers.DeclarativeContainer):
         vaults_dao=database.vaults_dao,
         user_files_dao=database.user_files_dao,
         logger=logger,
+        settings=config,
     )
 
     credential_cookie_matcher = providers.Factory(
