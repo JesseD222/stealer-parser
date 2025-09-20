@@ -13,6 +13,7 @@ The database output component exports parsed stealer data directly to a PostgreS
 - **Batch Processing**: Efficiently inserts large amounts of data using batch operations
 - **Error Handling**: Comprehensive error handling with transaction rollback on failures
 - **Connection Management**: Automatic connection management with context manager support
+- **Structured Logging**: Context-rich logs for exporter and DAO operations to speed up triage
 
 ## Prerequisites
 
@@ -175,23 +176,42 @@ The component includes comprehensive error handling:
 - **Transaction Rollback**: Automatic rollback on any insertion error
 - **Validation**: Parameter validation before attempting connection
 - **Field Length Protection**: Automatic truncation of overly long data fields
-- **Batch Insert Fallback**: Falls back to individual inserts if batch operations fail
+- **Retry/Backoff**: Transient errors are retried with exponential backoff and jitter in the exporter
+- **Batch Insert Fallback**: Falls back to individual inserts only when `psycopg2.extras.execute_values` is unavailable
 - **Partial Success Handling**: Continues processing even if some records fail
 - **Data Sanitization**: Safely truncates data to prevent database field overflow
 
 ### Error Recovery Features
 
 1. **Automatic Data Truncation**: Fields that exceed database limits are automatically truncated with "..." suffix
-2. **Batch to Individual Fallback**: If batch inserts fail, the system attempts individual record insertion
-3. **System-Level Error Isolation**: Failure to process one system doesn't stop processing of others
-4. **Detailed Logging**: Comprehensive logging at multiple levels (warning, error, debug) for troubleshooting
+2. **Retry with Backoff**: Transient connection/transaction errors in the exporter are retried with exponential backoff + jitter
+3. **Batch Fallback (Capability)**: If `execute_values` is not available at runtime, the system falls back to individual inserts
+4. **System-Level Error Isolation**: Failure to process one system doesn't stop processing of others
+5. **Detailed Logging**: Comprehensive logging at multiple levels (warning, error, debug) for troubleshooting
 
 ## Performance Considerations
 
-- **Batch Inserts**: Uses `executemany()` for efficient bulk insertions
+- **Batch Inserts**: Uses `psycopg2.extras.execute_values` for efficient bulk insertions
 - **Indexing**: Automatically creates indexes on frequently queried columns
 - **Transactions**: Groups related operations in transactions for consistency
 - **Connection Pooling**: Consider using connection pooling for high-volume processing
+
+## Logging
+
+Both the exporter and DAOs emit structured, context-rich logs to aid troubleshooting:
+
+- Exporter
+   - `db_connect_ok`: logs safe connection info (host, port, dbname, user)
+   - `db_retry`: attempt number, backoff seconds, and exception summary
+   - `db_export_start`/`db_export_done`: filename and counts exported
+
+- DAOs (on errors)
+   - Include: `dao`, `action`, `table`, and relevant identifiers (e.g., `leak_id`, `system_id`, `machine_id`, `filename`, `filepath`, `rows`)
+   - Example: `db_error op=execute_values rows=100 own_conn=True dao=CredentialsDAO action=bulk_insert table=credentials system_id=42 rows=100 err=...`
+
+Notes
+- Sensitive secrets (passwords) are never logged; only safe connection metadata and record context are included.
+- Overly long values are truncated in logs to keep output readable.
 
 ## Troubleshooting
 

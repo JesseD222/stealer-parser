@@ -105,6 +105,21 @@ def main(
         if archive:
             archive.close()
 
+
+def cli() -> None:
+    """Console script entrypoint that initializes DI and invokes main."""
+    app_container = AppContainer()
+    app_container.wire(modules=[__name__])
+    app_container.init_resources()
+    try:
+        logger = app_container.logger()
+        leak_processor = app_container.leak_processor()
+        db_exporter = app_container.services.postgres_exporter()
+        settings = app_container.config()
+        main(logger=logger, leak_processor=leak_processor, db_exporter=db_exporter, settings=settings)
+    finally:
+        app_container.shutdown_resources()
+
 def export_to_database(
     db_exporter: PostgreSQLExporter,
     logger: VerboseLogger,
@@ -153,19 +168,4 @@ def export_to_database(
 
 
 if __name__ == "__main__":
-    # Initialize DI container
-    app_container = AppContainer()
-
-    app_container.wire(modules=[__name__])
-    # Initialize resources (e.g., DB pool)
-    app_container.init_resources()
-    try:
-        # Resolve dependencies explicitly to avoid unresolved Provide objects
-        logger = app_container.logger()
-        leak_processor = app_container.leak_processor()
-        db_exporter = app_container.services.postgres_exporter()
-        settings = app_container.config()
-        main(logger=logger, leak_processor=leak_processor, db_exporter=db_exporter, settings=settings)
-    finally:
-        # Ensure resources are cleaned up
-        app_container.shutdown_resources()
+    cli()
