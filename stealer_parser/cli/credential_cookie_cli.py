@@ -263,11 +263,6 @@ def main():
         default=Path("./cookie_exports"),
         help="Directory to save cookie jar files (default: ./cookie_exports)"
     )
-    parser.add_argument("--db-host", default="localhost", help="Database host")
-    parser.add_argument("--db-port", type=int, default=5432, help="Database port")
-    parser.add_argument("--db-name", default="derp", help="Database name")
-    parser.add_argument("--db-user", default="derp", help="Database user")
-    parser.add_argument("--db-password", default="disforderp", help="Database password")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument(
         "--config", 
@@ -280,21 +275,6 @@ def main():
     # Initialize container and wire modules
     container = AppContainer()
     config = container.config()
-    
-    # The pydantic-settings model loads from .env automatically.
-    # We just need to override with CLI args.
-    
-    # Override config with CLI args if provided
-    if args.db_host:
-        config.db_host = args.db_host
-    if args.db_port:
-        config.db_port = args.db_port
-    if args.db_name:
-        config.db_name = args.db_name
-    if args.db_user:
-        config.db_user = args.db_user
-    if args.db_password:
-        config.db_password = args.db_password
 
     # Setup logger
     log_level = "verbose" if args.verbose else "info"

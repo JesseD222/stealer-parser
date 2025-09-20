@@ -18,9 +18,7 @@ python credential_cookie_cli.py paypal.com ./paypal_exports
 
 # Search for Stake.us with custom database settings
 python credential_cookie_cli.py stake.us ./stake_exports \
-    --db-host localhost \
-    --db-user postgres \
-    --db-password mypassword
+    
 
 # Search GitHub with verbose output and custom filename template
 python credential_cookie_cli.py github.com ./github_exports \
@@ -40,11 +38,10 @@ python credential_cookie_cli.py binance.com ./binance_exports --quiet
 
 ### Database Connection Options
 
-- `--db-host` - Database host (default: localhost)
-- `--db-port` - Database port (default: 5432)  
-- `--db-name` - Database name (default: stealer_parser)
-- `--db-user` - Database user (default: postgres)
-- `--db-password` - Database password (default: empty)
+Database connection is read from environment or `.env` managed by the main app. See `.env.example` at the project root for a complete template you can copy to `.env`.
+
+Keys used:
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
 
 ### Export Options
 

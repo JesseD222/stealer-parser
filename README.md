@@ -84,10 +84,43 @@ $ poetry install
 $ poetry shell
 ```
 
+## Environment Setup
+
+Use the provided `.env.example` to configure database and parser behavior. Copy it and adjust values:
+
+```bash
+cp .env.example .env
+```
+
+Key variables:
+
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`: PostgreSQL connection.
+- `DB_CREATE_TABLES`: `true|false` to recreate schema before export.
+- `PREFER_DEFINITION_PARSERS`: `true|false` to prefer YAML definition parsers.
+- `RECORD_DEFINITIONS_DIRS`: Comma-separated directories for YAML definitions.
+- `PARSER_MATCH_THRESHOLD`: Float threshold for definition matching confidence.
+
+Quick .env template:
+
+```dotenv
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=derp
+DB_USER=derp
+DB_PASSWORD=disforderp
+DB_CREATE_TABLES=false
+
+# Parser
+PREFER_DEFINITION_PARSERS=false
+RECORD_DEFINITIONS_DIRS=record_definitions
+PARSER_MATCH_THRESHOLD=2.0
+```
+
 ## Usage
 
 ```console
-stealer_parser [-h] [-p ARCHIVE_PASSWORD] [-o FILENAME.json] [-v] filename
+stealer_parser [-h] [-p ARCHIVE_PASSWORD] [--dump-json FILENAME.json] [-v] filename
 
 Parse infostealer logs archives.
 
@@ -98,8 +131,8 @@ options:
   -h, --help            show this help message and exit
   -p ARCHIVE_PASSWORD, --password ARCHIVE_PASSWORD
                         the archive's password if required
-  -o FILENAME.json, --outfile FILENAME.json
-                        the output file name (.json extension)
+  --dump-json FILENAME.json
+                        also write parsed output to this JSON file
   -v, --verbose         increase logs output verbosity (default: info, -v: verbose, -vv: debug, -vvv: spam)
 ```
 
@@ -129,25 +162,23 @@ $ stealer_parser myfile.zip --password mypassword
 Choose output file name:
 
 ```console
-$ stealer_parser myfile.zip --outfile results/foo.json
+$ stealer_parser myfile.zip --dump-json results/foo.json
 ```
 
 ### Database Export
 
-Export directly to PostgreSQL database:
+By default, results are exported to PostgreSQL using settings from `.env` or environment variables (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`). See `docs/database_export.md` for full details.
 
-```console
-$ stealer_parser myfile.rar --db-export --db-create-tables
-2024-07-08 13:37:00 - StealerParser - INFO - Processing: myfile.rar ...
-2024-07-08 13:37:00 - StealerParser - INFO - Creating database tables...
-2024-07-08 13:37:00 - StealerParser - INFO - Exporting myfile.rar to database...
-2024-07-08 13:37:01 - StealerParser - INFO - Database export completed successfully: 983 systems, 15420 credentials, 8932 cookies exported
+Enable schema creation on startup via `.env`:
+
+```
+DB_CREATE_TABLES=true
 ```
 
-With custom database connection:
+Also dump JSON alongside DB export:
 
 ```console
-$ stealer_parser myfile.zip --db-export --db-host 192.168.1.100 --db-user analyst --db-password secret
+$ stealer_parser myfile.rar --dump-json ./results/foo.json
 ```
 
 ## Documentation

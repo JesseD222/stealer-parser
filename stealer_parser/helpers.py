@@ -13,15 +13,15 @@ from verboselogs import VerboseLogger
 class EnhancedJSONEncoder(JSONEncoder):
     """Enhanced JSON encoder for specific classes."""
 
-    def default(self: Any, obj: Any) -> Any:
+    def default(self, o: Any) -> Any:  # type: ignore[override]
         """Handle custom types JSON serialization."""
-        if is_dataclass(obj):
-            return asdict(obj)
-        if isinstance(obj, (datetime, date)):
-            return obj.isoformat()
-        if isinstance(obj, set):
-            return list(obj)
-        return super().default(obj)
+        if is_dataclass(o) and not isinstance(o, type):
+            return asdict(o)
+        if isinstance(o, (datetime, date)):
+            return o.isoformat()
+        if isinstance(o, set):
+            return list(o)
+        return super().default(o)
 
 
 def dump_to_file(
@@ -94,59 +94,11 @@ def parse_options(description: str) -> Namespace:
         help="the archive's password if required",
     )
     parser.add_argument(
-        "-o",
-        "--outfile",
+        "--dump-json",
         metavar="FILENAME.json",
         type=str,
         default=None,
-        help="the output file name (expects a .json)",
-    )
-    
-    # Database output options
-    parser.add_argument(
-        "--db-export",
-        action="store_true",
-        help="export data to PostgreSQL database instead of JSON",
-    )
-    parser.add_argument(
-        "--db-host",
-        metavar="HOST",
-        type=str,
-        default="localhost",
-        help="PostgreSQL server hostname (default: localhost)",
-    )
-    parser.add_argument(
-        "--db-port",
-        metavar="PORT",
-        type=int,
-        default=5432,
-        help="PostgreSQL server port (default: 5432)",
-    )
-    parser.add_argument(
-        "--db-name",
-        metavar="DATABASE",
-        type=str,
-        default="derp",
-        help="PostgreSQL database name (default: stealer_parser)",
-    )
-    parser.add_argument(
-        "--db-user",
-        metavar="USERNAME",
-        type=str,
-        default="derp",
-        help="PostgreSQL username (default: postgres)",
-    )
-    parser.add_argument(
-        "--db-password",
-        metavar="PASSWORD",
-        type=str,
-        default="disforderp",
-        help="PostgreSQL password (default: empty)",
-    )
-    parser.add_argument(
-        "--db-create-tables",
-        action="store_true",
-        help="create database tables if they don't exist",
+        help="also write parsed output to a JSON file",
     )
     parser.add_argument(
         "-v",
@@ -159,12 +111,7 @@ def parse_options(description: str) -> Namespace:
 
     args: Namespace = parser.parse_args()
 
-    # Validate arguments
-    if not args.db_export and not args.outfile:
-        args.outfile = Path(args.filename).with_suffix(".json").name
-    
-    if args.db_export and args.outfile:
-        parser.error("Cannot specify both --outfile and --db-export")
+    # No validation needed: DB export is default; JSON dump is optional
 
     return args
 

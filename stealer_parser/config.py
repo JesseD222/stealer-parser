@@ -26,11 +26,12 @@ class Settings(BaseSettings):
     db_name: str = "derp"
     db_user: str = "derp"
     db_password: str = "disforderp"
+    db_create_tables: bool = False
 
     # Parser feature flags and configuration
     prefer_definition_parsers: bool = False
     record_definitions_dirs: List[str] = ["record_definitions"]
-    parser_match_threshold: float = 2.0
+    parser_match_threshold: float = 0.15
     
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding='utf-8', extra='ignore')
 
