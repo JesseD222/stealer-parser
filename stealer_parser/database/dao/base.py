@@ -32,7 +32,14 @@ class BaseDAO(ABC):
         """Insert multiple data objects and return the number of inserted rows."""
         raise NotImplementedError
 
-    def _execute_query(self, query: str, params: Tuple | Dict = (), fetch: Optional[str] = None, conn=None) -> Any:
+    def _execute_query(
+        self,
+        query: str,
+        params: Tuple | Dict = (),
+        fetch: Optional[str] = None,
+        conn=None,
+        ctx: Optional[Dict[str, Any]] = None,
+    ) -> Any:
         """Execute a query and return results.
 
         If a connection is provided, it will be used without committing; the caller manages transactions.
@@ -55,20 +62,37 @@ class BaseDAO(ABC):
         except Exception as e:
             if conn and own_conn:
                 conn.rollback()
-            self.logger.error(f"Database query failed: {e}")
+            ctx_str = self._fmt_ctx(ctx)
+            self.logger.error(
+                f"db_error op=execute_query fetch={fetch} own_conn={own_conn} {ctx_str}err={e}"
+            )
             raise
         finally:
             if conn and own_conn:
                 self.db_pool.putconn(conn)
 
-    def _execute_values(self, query: str, data: List[Tuple], conn=None) -> int:
+    def _execute_values(
+        self,
+        query: str,
+        data: List[Tuple],
+        conn=None,
+        ctx: Optional[Dict[str, Any]] = None,
+    ) -> int:
         """Execute a query with a list of tuples using execute_values.
 
         Honors the same external connection semantics as _execute_query.
         """
         if not execute_values:
             # Fallback to individual inserts if execute_values is not available
-            return sum(self._execute_query(query.replace("%s", "(" + ",".join(["%s"]*len(d)) + ")"), d, conn=conn) for d in data)
+            return sum(
+                self._execute_query(
+                    query.replace("%s", "(" + ",".join(["%s"] * len(d)) + ")"),
+                    d,
+                    conn=conn,
+                    ctx=ctx,
+                )
+                for d in data
+            )
 
         own_conn = False
         try:
@@ -83,11 +107,29 @@ class BaseDAO(ABC):
         except Exception as e:
             if conn and own_conn:
                 conn.rollback()
-            self.logger.error(f"Database bulk insert failed: {e}")
+            ctx_rows = len(data) if isinstance(data, list) else "unknown"
+            ctx_str = self._fmt_ctx(ctx)
+            self.logger.error(
+                f"db_error op=execute_values rows={ctx_rows} own_conn={own_conn} {ctx_str}err={e}"
+            )
             raise
         finally:
             if conn and own_conn:
                 self.db_pool.putconn(conn)
+
+    def _fmt_ctx(self, ctx: Optional[Dict[str, Any]]) -> str:
+        if not ctx:
+            return ""
+        parts: List[str] = []
+        for k, v in ctx.items():
+            # Avoid None and overly long values; keep logs readable and safe
+            if v is None:
+                continue
+            s = str(v)
+            if len(s) > 256:
+                s = s[:253] + "..."
+            parts.append(f"{k}={s}")
+        return (" ".join(parts) + " ") if parts else ""
 
 
 class LeaksDAO(BaseDAO):
@@ -96,12 +138,29 @@ class LeaksDAO(BaseDAO):
     def insert(self, *args: Any, conn=None) -> int:
         data: Leak = args[0]
         query = "INSERT INTO leaks (filename) VALUES (%s) RETURNING id;"
-        result = self._execute_query(query, (data.filename,), fetch="one", conn=conn)
+        result = self._execute_query(
+            query,
+            (data.filename,),
+            fetch="one",
+            conn=conn,
+            ctx={"dao": "LeaksDAO", "action": "insert", "table": "leaks", "filename": data.filename},
+        )
         return result[0]
 
     def update_counts(self, leak_id: int, systems_count: int, conn=None) -> None:
         query = "UPDATE leaks SET systems_count = %s WHERE id = %s;"
-        self._execute_query(query, (systems_count, leak_id), conn=conn)
+        self._execute_query(
+            query,
+            (systems_count, leak_id),
+            conn=conn,
+            ctx={
+                "dao": "LeaksDAO",
+                "action": "update_counts",
+                "table": "leaks",
+                "leak_id": leak_id,
+                "systems_count": systems_count,
+            },
+        )
 
 
 class SystemsDAO(BaseDAO):
@@ -125,7 +184,19 @@ class SystemsDAO(BaseDAO):
             data.country,
             data.log_date,
         )
-        result = self._execute_query(query, params, fetch="one", conn=conn)
+        result = self._execute_query(
+            query,
+            params,
+            fetch="one",
+            conn=conn,
+            ctx={
+                "dao": "SystemsDAO",
+                "action": "insert",
+                "table": "systems",
+                "leak_id": leak_id,
+                "machine_id": data.machine_id,
+            },
+        )
         return result[0]
 
 
@@ -151,7 +222,19 @@ class CredentialsDAO(BaseDAO):
             str(data.filepath),
             data.stealer_name,
         )
-        return self._execute_query(query, params, conn=conn)
+        return self._execute_query(
+            query,
+            params,
+            conn=conn,
+            ctx={
+                "dao": "CredentialsDAO",
+                "action": "insert",
+                "table": "credentials",
+                "system_id": system_id,
+                "host": data.host,
+                "filepath": str(data.filepath),
+            },
+        )
 
     def bulk_insert(self, *args: Any, conn=None) -> int:
         data: List[Credential] = args[0]
@@ -175,7 +258,18 @@ class CredentialsDAO(BaseDAO):
             )
             for cred in data
         ]
-        return self._execute_values(query, params, conn=conn)
+        return self._execute_values(
+            query,
+            params,
+            conn=conn,
+            ctx={
+                "dao": "CredentialsDAO",
+                "action": "bulk_insert",
+                "table": "credentials",
+                "system_id": system_id,
+                "rows": len(data),
+            },
+        )
 
 
 class CookiesDAO(BaseDAO):
@@ -202,7 +296,19 @@ class CookiesDAO(BaseDAO):
             str(data.filepath),
             data.stealer_name,
         )
-        return self._execute_query(query, params, conn=conn)
+        return self._execute_query(
+            query,
+            params,
+            conn=conn,
+            ctx={
+                "dao": "CookiesDAO",
+                "action": "insert",
+                "table": "cookies",
+                "system_id": system_id,
+                "domain": data.domain,
+                "filepath": str(data.filepath),
+            },
+        )
 
     def bulk_insert(self, *args: Any, conn=None) -> int:
         data: List[Cookie] = args[0]
@@ -228,4 +334,15 @@ class CookiesDAO(BaseDAO):
             )
             for cookie in data
         ]
-        return self._execute_values(query, params, conn=conn)
+        return self._execute_values(
+            query,
+            params,
+            conn=conn,
+            ctx={
+                "dao": "CookiesDAO",
+                "action": "bulk_insert",
+                "table": "cookies",
+                "system_id": system_id,
+                "rows": len(data),
+            },
+        )

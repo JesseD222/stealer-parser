@@ -63,7 +63,16 @@ class CredentialCookieDAO(BaseDAO):
         WHERE c.host LIKE %(host_pattern)s
         ORDER BY s.id, c.id, ck.id;
         """
-        return self._execute_query(query, {"host_pattern": f"%{host_pattern}%"}, fetch="all")
+        return self._execute_query(
+            query,
+            {"host_pattern": f"%{host_pattern}%"},
+            fetch="all",
+            ctx={
+                "dao": "CredentialCookieDAO",
+                "action": "find_matches",
+                "host_pattern": host_pattern,
+            },
+        )
 
     def insert(self, *args: Any) -> int:
         """Not implemented for this read-only DAO."""
