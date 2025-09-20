@@ -51,11 +51,6 @@ python -m stealer_parser.credential_cookie_matcher stake.us
 
 # With custom database settings
 python -m stealer_parser.credential_cookie_matcher stake.us \
-    --db-host localhost \
-    --db-port 5432 \
-    --db-name stealer_parser \
-    --db-user postgres \
-    --db-password mypassword \
     --output-dir ./my_exports \
     --verbose
 
@@ -130,11 +125,8 @@ The component uses the following SQL logic:
 1. **Credential Matching**: Finds credentials where `host` contains the specified pattern (case-insensitive)
 2. **Cookie Matching**: For each system with matching credentials, finds cookies where `domain` matches:
    - Contains the pattern anywhere in the domain
-   - Exactly matches the pattern
-   - Matches as a subdomain (`.pattern`)
-   - Matches with subdomain prefix (`*.pattern`)
-
-3. **Deduplication**: Cookies are deduplicated based on the combination of:
+  --output-dir ./my_exports \
+  --verbose
    - Domain
    - Cookie name  
    - Path

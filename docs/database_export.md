@@ -4,7 +4,7 @@ This document describes how to use the PostgreSQL database output component for 
 
 ## Overview
 
-The database output component allows you to export parsed stealer data directly to a PostgreSQL database instead of JSON files. This provides better data organization, querying capabilities, and integration with other tools.
+The database output component exports parsed stealer data directly to a PostgreSQL database by default. Configuration comes from environment variables or a `.env` file, with optional JSON dumps.
 
 ## Features
 
@@ -92,47 +92,37 @@ The component creates four main tables:
 
 ### Basic Database Export
 
-Export to a PostgreSQL database on localhost:
+By default the parser exports to PostgreSQL. To also dump JSON:
 
 ```bash
-stealer_parser myfile.rar --db-export --db-create-tables
+stealer_parser myfile.rar --dump-json results/myfile.json
 ```
 
 ### Custom Database Connection
 
-Specify custom connection parameters:
+Configure connection via environment or `.env` (examples):
 
-```bash
-stealer_parser myfile.zip \\
-  --db-export \\
-  --db-host 192.168.1.100 \\
-  --db-port 5432 \\
-  --db-name my_stealer_db \\
-  --db-user analyst \\
-  --db-password secret123 \\
-  --db-create-tables
 ```
+DB_HOST=192.168.1.100
+DB_PORT=5432
+DB_NAME=stealer_parser
+DB_USER=analyst
+DB_PASSWORD=secret123
+DB_CREATE_TABLES=false
+```
+
+See `.env.example` at the project root for a complete template you can copy to `.env`.
 
 ### Environment Variables
 
-You can also use environment variables for sensitive information:
+You can also use environment exports (e.g., `export DB_PASSWORD=secret123`).
 
-```bash
-export PGPASSWORD=secret123
-stealer_parser myfile.7z --db-export --db-user analyst --db-create-tables
-```
+## Configuration Keys
 
-## Command Line Options
+Available configuration keys (via environment or `.env`):
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--db-export` | Enable database export mode | False |
-| `--db-host` | PostgreSQL hostname | localhost |
-| `--db-port` | PostgreSQL port | 5432 |
-| `--db-name` | Database name | stealer_parser |
-| `--db-user` | Database username | postgres |
-| `--db-password` | Database password | (empty) |
-| `--db-create-tables` | Create tables if they don't exist | False |
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
+- `DB_CREATE_TABLES` (true/false) — recreate schema before export
 
 ## Example Queries
 
@@ -223,7 +213,7 @@ The component includes comprehensive error handling:
    - Check database user privileges
 
 4. **"Table already exists"**
-   - Use `--db-create-tables` flag to handle existing tables
+   - Control schema creation via `DB_CREATE_TABLES` in `.env`
    - Or manually create tables using the schema
 
 ## Field Size Limits
@@ -262,7 +252,7 @@ psql -d stealer_parser -f stealer_parser/database/migration_001.sql
 
 Use verbose logging to diagnose issues:
 ```bash
-stealer_parser myfile.rar --db-export -vvv
+stealer_parser myfile.rar -vvv
 ```
 
 This increases the username field from 500 to 1000 characters.

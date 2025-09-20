@@ -36,13 +36,8 @@ Includes proper foreign key relationships and indexes for performance.
 
 ### 5. Command Line Interface
 Extended CLI with new database options:
-- `--db-export`: Enable database export mode
-- `--db-host`: PostgreSQL hostname (default: localhost)
-- `--db-port`: PostgreSQL port (default: 5432)
-- `--db-name`: Database name (default: stealer_parser)
-- `--db-user`: Database username (default: postgres)
-- `--db-password`: Database password (default: empty)
-- `--db-create-tables`: Create tables if they don't exist
+- Default export: PostgreSQL (configured by env or .env)
+- `--dump-json <file>`: Also write JSON output
 
 ### 6. Main Application Integration
 Modified `main.py` to:
@@ -61,17 +56,13 @@ Created comprehensive documentation:
 
 ### Basic Database Export
 ```bash
-stealer_parser myfile.rar --db-export --db-create-tables
+stealer_parser myfile.rar --dump-json results/myfile.json
 ```
 
 ### Custom Database Connection
 ```bash
 stealer_parser myfile.zip \\
-  --db-export \\
-  --db-host 192.168.1.100 \\
-  --db-user analyst \\
-  --db-password secret123 \\
-  --db-create-tables
+  -vvv
 ```
 
 ### JSON Export (unchanged)

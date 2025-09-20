@@ -2,7 +2,7 @@
 import inspect
 import pkgutil
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from verboselogs import VerboseLogger
 
@@ -17,7 +17,7 @@ from .factory import ParserFactory
 class ParserRegistry:
     """Registry for file parser plugins."""
 
-    def __init__(self, logger: VerboseLogger, definition_store: Optional[DefinitionStore] = None, parser_factory: Optional[ParserFactory] = None):
+    def __init__(self, logger: VerboseLogger, definition_store: Optional[Any] = None, parser_factory: Optional[ParserFactory] = None):
         self.logger = logger
         self._parsers = self._discover_parsers()
         self._definition_store = definition_store
@@ -55,11 +55,21 @@ class ParserRegistry:
     def find_best_for(self, path: Path, sample_text: str, threshold: float = 0.15) -> Optional[Parser]:
         """Return a configured definition-backed parser if a confident match is found; otherwise fallback."""
         if not (self._definition_store and self._parser_factory):
-            return self.get_parser(str(path))
+            fallback = self.get_parser(str(path))
+            if fallback:
+                self.logger.info(
+                    f"parser_selection kind=legacy reason=definitions-unavailable file={path} parser={fallback.__class__.__name__}"
+                )
+            return fallback
 
         defs = self._definition_store.load_all()
         if not defs:
-            return self.get_parser(str(path))
+            fallback = self.get_parser(str(path))
+            if fallback:
+                self.logger.info(
+                    f"parser_selection kind=legacy reason=no-definitions file={path} parser={fallback.__class__.__name__}"
+                )
+            return fallback
 
         lines = sample_text.splitlines()[:200]
         scored = [(d, score_definition(path, lines, d)) for d in defs]
@@ -68,10 +78,15 @@ class ParserRegistry:
             best_def = scored[0][0]
             best_score = scored[0][1]
             parts = self._parser_factory.build_parts(best_def)
-            # Pass logger from registry to the configurable parser
             self.logger.info(
-                f"parser_selection kind=definition-backed def={best_def.key} score={best_score:.3f} file={path}"
+                f"parser_selection kind=definition-backed def={best_def.key} score={best_score:.3f} threshold={threshold:.3f} file={path}"
             )
             return ConfigurableParser(logger=self.logger, definition=best_def, parts=parts)
 
-        return self.get_parser(str(path))
+        top_score = scored[0][1] if scored else 0.0
+        fallback = self.get_parser(str(path))
+        if fallback:
+            self.logger.info(
+                f"parser_selection kind=fallback top_score={top_score:.3f} threshold={threshold:.3f} file={path} parser={fallback.__class__.__name__}"
+            )
+        return fallback

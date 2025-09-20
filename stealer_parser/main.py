@@ -13,6 +13,7 @@ from stealer_parser.database.postgres import PostgreSQLExporter
 from stealer_parser.helpers import parse_options
 from stealer_parser.models import ArchiveWrapper, Leak
 from stealer_parser.services.leak_processor import LeakProcessor
+from stealer_parser.config import Settings
 
 def read_archive(
     buffer: BytesIO, filename: str, password: str | None
@@ -66,6 +67,7 @@ def main(
     db_exporter: PostgreSQLExporter = Provide[AppContainer.services.postgres_exporter],
     logger: VerboseLogger = Provide[AppContainer.logger],
     leak_processor: "LeakProcessor" = Provide[AppContainer.leak_processor],
+    settings: Settings = Provide[AppContainer.config],
 ) -> None:
     """Program's entrypoint."""
     args: Namespace = parse_options("Parse infostealer logs archives.")
@@ -92,7 +94,12 @@ def main(
 
     else:
         if leak:
-                export_to_database(db_exporter=db_exporter, logger=logger, leak=leak, args=args)
+            # Default: export to DB based on environment/config
+            export_to_database(db_exporter=db_exporter, logger=logger, leak=leak, settings=settings)
+            # Optional: also dump JSON if requested
+            if getattr(args, "dump_json", None):
+                from stealer_parser.helpers import dump_to_file
+                dump_to_file(logger, args.dump_json, leak)
 
     finally:
         if archive:
@@ -102,7 +109,7 @@ def export_to_database(
     db_exporter: PostgreSQLExporter,
     logger: VerboseLogger,
     leak: Leak,
-    args: Namespace
+    settings: Settings,
 ) -> None:
     """Export leak data to PostgreSQL database.
     
@@ -125,13 +132,13 @@ def export_to_database(
                 logger.error("Failed to establish database connection")
                 return
             
-            # Create tables if requested
-            if True:
+            # Create tables if requested via settings
+            if getattr(settings, "db_create_tables", False):
                 logger.info("Creating database tables...")
                 db_exporter.recreate_schema()
             
             # Export the leak data
-            logger.info(f"Exporting {args.filename} to database...")
+            logger.info(f"Exporting {leak.filename} to database...")
             stats = db_exporter.export_leak(leak)
             
             logger.info(
@@ -157,7 +164,8 @@ if __name__ == "__main__":
         logger = app_container.logger()
         leak_processor = app_container.leak_processor()
         db_exporter = app_container.services.postgres_exporter()
-        main(logger=logger, leak_processor=leak_processor, db_exporter=db_exporter)
+        settings = app_container.config()
+        main(logger=logger, leak_processor=leak_processor, db_exporter=db_exporter, settings=settings)
     finally:
         # Ensure resources are cleaned up
         app_container.shutdown_resources()
