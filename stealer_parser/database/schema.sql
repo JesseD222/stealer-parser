@@ -1,6 +1,8 @@
 
 -- Drop tables if they exist (in reverse order due to foreign key constraints)
 DROP TABLE IF EXISTS cookies CASCADE;
+DROP TABLE IF EXISTS vaults CASCADE;
+DROP TABLE IF EXISTS user_files CASCADE;
 DROP TABLE IF EXISTS credentials CASCADE;
 DROP TABLE IF EXISTS systems CASCADE;
 DROP TABLE IF EXISTS leaks CASCADE;
@@ -78,3 +80,41 @@ CREATE INDEX IF NOT EXISTS idx_cookies_system_id ON cookies(system_id);
 CREATE INDEX IF NOT EXISTS idx_cookies_domain ON cookies(domain);
 CREATE INDEX IF NOT EXISTS idx_cookies_browser ON cookies(browser);
 CREATE INDEX IF NOT EXISTS idx_cookies_stealer_name ON cookies(stealer_name);
+
+-- Table to store vault entries and artifacts
+CREATE TABLE IF NOT EXISTS vaults (
+    id SERIAL PRIMARY KEY,
+    system_id INTEGER NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+    vault_type VARCHAR(255),
+    title VARCHAR(1000),
+    url TEXT,
+    username VARCHAR(1000),
+    password TEXT,
+    notes TEXT,
+    vault_data TEXT,
+    key_phrase TEXT,
+    seed_words TEXT,
+    browser VARCHAR(255),
+    profile VARCHAR(255),
+    filepath TEXT,
+    stealer_name VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_vaults_system_id ON vaults(system_id);
+CREATE INDEX IF NOT EXISTS idx_vaults_title ON vaults(title);
+CREATE INDEX IF NOT EXISTS idx_vaults_browser ON vaults(browser);
+
+-- Table to store general user files metadata
+CREATE TABLE IF NOT EXISTS user_files (
+    id SERIAL PRIMARY KEY,
+    system_id INTEGER NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+    file_path TEXT,
+    file_size BIGINT,
+    target_hits INTEGER,
+    detected_patterns TEXT,
+    stealer_name VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_files_system_id ON user_files(system_id);

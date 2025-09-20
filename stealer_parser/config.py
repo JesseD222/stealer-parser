@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Parser feature flags and configuration
     prefer_definition_parsers: bool = False
     record_definitions_dirs: List[str] = ["record_definitions"]
-    parser_match_threshold: float = 0.15
+    parser_match_threshold: float = 2.0
     
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding='utf-8', extra='ignore')
 

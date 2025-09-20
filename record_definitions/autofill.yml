@@ -1,0 +1,53 @@
+key: autofill
+description: Browser autofill entries (names, emails, phones, addresses)
+file_globs: ["**/*autofill*.txt", "**/*formdata*.txt", "**/*form_history*.txt"]
+record_separators:
+  - "^$"
+  - "^-{2,}\\s*$"
+kv_delimiters: [":", "="]
+multiline: true
+fields:
+  - name: full_name
+    aliases: ["name", "fullname", "first and last name", "first last"]
+    header_patterns: ['(?i)^(name|full\s*name|fullname|first\s*and\s*last\s*name|first\s*last)\s*[:=]']
+    group: identity
+  - name: first_name
+    aliases: ["first", "given name"]
+    header_patterns: ['(?i)^(first|given\s*name)\s*[:=]']
+    group: identity
+  - name: last_name
+    aliases: ["surname", "family name", "last"]
+    header_patterns: ['(?i)^(last|surname|family\s*name)\s*[:=]']
+    group: identity
+  - name: email
+    aliases: ["e-mail", "mail"]
+    header_patterns: ['(?i)^(email|e-mail|mail)\s*[:=]']
+    group: contact
+  - name: phone
+    aliases: ["telephone", "tel", "mobile"]
+    header_patterns: ['(?i)^(phone|telephone|tel|mobile)\s*[:=]']
+    group: contact
+  - name: address1
+    aliases: ["address", "street", "addr1", "line1"]
+    header_patterns: ['(?i)^(address|street|addr1|line1)\s*[:=]']
+    group: address
+  - name: address2
+    aliases: ["addr2", "line2", "suite", "apt"]
+    header_patterns: ['(?i)^(addr2|line2|suite|apt)\s*[:=]']
+    group: address
+  - name: city
+    aliases: ["town"]
+    header_patterns: ['(?i)^(city|town)\s*[:=]']
+    group: address
+  - name: state
+    aliases: ["province", "region", "state/province"]
+    header_patterns: ['(?i)^(state|province|region|state/province)\s*[:=]']
+    group: address
+  - name: postal_code
+    aliases: ["zip", "zipcode", "post code"]
+    header_patterns: ['(?i)^(postal\s*code|zip|zipcode|post\s*code)\s*[:=]']
+    group: address
+  - name: country
+    aliases: ["nation"]
+    header_patterns: ['(?i)^(country|nation)\s*[:=]']
+    group: address

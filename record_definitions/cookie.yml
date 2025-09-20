@@ -1,0 +1,35 @@
+key: cookie
+description: Netscape cookie format (7 fields per line)
+file_globs: ["**/*cookies*.txt", "**/cookies.txt", "**/*_cookies.txt"]
+kv_delimiters: ["\t", " "]
+multiline: false
+path_extractors:
+  # Wallets/BrowserName ProfileName/... shape
+  - '(?i).*/wallets/(?P<browser>[^/\s]+)\s+(?P<profile>[^/]+)/.*'
+  # Browser/Profiles or Browser/ProfileName shapes
+  - '(?i).*/(?P<browser>chrome|brave|edge|firefox)/(?P<profile>default|profile\s*\d+)/.*'
+fields:
+  - name: domain
+    aliases: ["host", "site"]
+    header_patterns: []
+    required: true
+  - name: domain_specified
+    aliases: ["flag"]
+    header_patterns: []
+  - name: path
+    aliases: []
+    header_patterns: []
+  - name: secure
+    aliases: []
+    header_patterns: []
+  - name: expiry
+    aliases: ["expires", "expiration"]
+    header_patterns: []
+  - name: name
+    aliases: ["key"]
+    header_patterns: []
+    required: true
+  - name: value
+    aliases: ["val"]
+    header_patterns: []
+    required: true

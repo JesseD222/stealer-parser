@@ -1,0 +1,74 @@
+Here’s a concise, incremental roadmap to integrate the dynamic, definition-driven parser approach while phasing out PLY and keeping DI, Registry, and services intact.
+
+Milestone 0 — Foundations and safety rails
+- Add feature flag to prefer “definition-backed” parsers over legacy PLY (env/CLI).
+- Introduce settings for record definition directories, confidence threshold, and fallback behavior.
+- Add basic telemetry fields: parser_kind, definition_key, match_score to logs.
+
+Milestone 1 — Unified record definitions and discovery
+- Model a RecordDefinition (fields, aliases, header patterns, separators, grouping, delimiters).
+- Implement a DefinitionStore that loads YAML/JSON from configured dirs.
+- Create a fast matcher that scores a file sample against definitions (path globs + content patterns).
+- Add unit tests with synthetic samples per record type; tune default scoring weights and threshold.
+
+Milestone 2 — Strategy registry and abstract factory
+- Introduce a StrategyRegistry with capability tags (e.g., regex-boundary, kv-headers, multiline, grouping).
+- Implement a ParserFactory that picks strategies based on definition capabilities (no if/else).
+- Register minimal strategies: RegexSeparatorChunker, KVHeaderExtractor, AliasGroupingTransformer.
+- Wire these into AppContainer via dependency-injector (singletons with cached registration).
+
+Milestone 3 — Configurable parser and registry integration
+- Implement ConfigurableParser that conforms to stealer_parser.parsing.parser.Parser.
+- Extend ParserRegistry with find_best_for(path, sample_text): pick definition-backed parser when score ≥ threshold; else fallback to legacy.
+- Modify LeakProcessor to sample input (first 8–12KB) and use find_best_for. Keep legacy flow unchanged otherwise.
+- Add golden tests to ensure outputs match current PLY outputs on known fixtures (credential, cookie).
+
+Milestone 4 — Tokenizer and richer extraction
+- Replace simple line-splitting with a streaming regex token generator (labels, values, separators).
+- Preserve record atomicity: chunk at record boundaries; keep field order within a record.
+- Add validation hooks in Transform: structural pattern matching on aliases/groups to normalize to models.
+
+Milestone 5 — Coverage expansion and robustness
+- Add definitions for additional record types (system info, autofill, vault).
+- Add per-definition value validators (e.g., URL, email, password heuristics).
+- Handle messy inputs: mixed encodings, very long lines, empty sections, nested separators.
+- Introduce a “confidence downgrade” path: if transform yields insufficient required fields, demote to legacy parser (guard-rail).
+
+Milestone 6 — Observability and quality gates
+- Add metrics: match_rate, avg_match_score, parse_latency, records_per_file; per parser_kind and definition_key.
+- Add DLQ/side-channel for low-confidence or failed normalizations; persist input excerpts for triage.
+- Linters and CI gates: run pytest, basic performance smoke (parse N fixtures under T seconds).
+
+Milestone 7 — Migration and deprecation plan
+- Run in dual mode by default; log match decisions and result diffs for a sample period.
+- Promote definition-backed parsers per record type once parity is proven; switch default flag.
+- Mark unused PLY parsers deprecated; remove after a grace period.
+
+Optional Milestone 8 — Async pipeline and broker (future)
+- Start with in-process asyncio queues between stages (Inspector → Chunker → Extractor → Transformer → Loader).
+- Abstract transports; later swap to FastStream Redis broker for distributed workers.
+- Keep record as the atomic unit; partition by DataUnit; add DLQ per stage.
+
+Deliverables per milestone
+- Code: models, registry/factory, strategies, parser, and DI wiring.
+- Tests: unit tests for matcher and strategies; golden tests for output parity; stress tests for large files.
+- Docs: definition schema, authoring guide, examples; migration notes and feature flag usage.
+- Observability: log fields and basic metrics integrated with existing VerboseLogger.
+
+Key risks and mitigations
+- Ambiguous matches: use conservative thresholds, path-glob signals, and required-field validation.
+- Mixed record types in one file: allow multi-definition parsing with record-level scoring if needed later.
+- Performance: compile regexes once per definition; sample only a small prefix; stream tokenization.
+- Backward compatibility: always maintain legacy fallback behind flag; add differential tests.
+
+Setup tasks
+- Add settings to config.py for definitions_dir, score_threshold, prefer_definition_parsers.
+- Update AppContainer to register DefinitionStore, StrategyRegistry, ParserFactory, and to pass them into ParserRegistry.
+- Create a record_definitions/ directory with initial credential.yml and cookie.yml.
+
+Acceptance criteria for initial rollout
+- ≥95% match rate on curated samples with parity to PLY outputs for credential and cookie.
+- No regressions in end-to-end CLI workflow; LeakProcessor unchanged for non-matching files.
+- Clear logs showing parser selection and confidence.
+
+If you want, I can scaffold the minimal models, registry wiring, and one initial RecordDefinition plus tests as the first PR.

@@ -126,7 +126,7 @@ def export_to_database(
                 return
             
             # Create tables if requested
-            if args.db_create_tables:
+            if True:
                 logger.info("Creating database tables...")
                 db_exporter.recreate_schema()
             
@@ -137,7 +137,7 @@ def export_to_database(
             logger.info(
                 f"Database export completed successfully: "
                 f"{stats['systems']} systems, {stats['credentials']} credentials, "
-                f"{stats['cookies']} cookies exported"
+                f"{stats['cookies']} cookies, {stats.get('vaults', 0)} vaults, {stats.get('user_files', 0)} user_files exported"
             )
     
     except Exception as err:

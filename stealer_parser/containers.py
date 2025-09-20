@@ -14,6 +14,8 @@ from stealer_parser.database.dao.base import (
     SystemsDAO,
 )
 from stealer_parser.database.dao.credential_cookie import CredentialCookieDAO
+from stealer_parser.database.dao.vault import VaultDAO
+from stealer_parser.database.dao.user_file import UserFilesDAO
 from stealer_parser.database.postgres import PostgreSQLExporter
 from stealer_parser.services.credential_cookie_matcher import CredentialCookieMatcher
 from stealer_parser.services.leak_processor import LeakProcessor
@@ -28,6 +30,11 @@ from stealer_parser.parsing.strategies.defaults import (
     RegexSeparatorChunker,
     KVHeaderExtractor,
     AliasGroupingTransformer,
+    LineChunker,
+    DelimitedLineExtractor,
+    FullFileChunker,
+    VaultExtractor,
+    VaultTransformer,
 )
 
 
@@ -59,6 +66,8 @@ class DatabaseContainer(containers.DeclarativeContainer):
     systems_dao = providers.Factory(SystemsDAO, db_pool=db_pool, logger=logger)
     credentials_dao = providers.Factory(CredentialsDAO, db_pool=db_pool, logger=logger)
     cookies_dao = providers.Factory(CookiesDAO, db_pool=db_pool, logger=logger)
+    vaults_dao = providers.Factory(VaultDAO, db_pool=db_pool, logger=logger)
+    user_files_dao = providers.Factory(UserFilesDAO, db_pool=db_pool, logger=logger)
     credential_cookie_dao = providers.Factory(
         CredentialCookieDAO, db_pool=db_pool, logger=logger
     )
@@ -78,6 +87,8 @@ class ServicesContainer(containers.DeclarativeContainer):
         systems_dao=database.systems_dao,
         credentials_dao=database.credentials_dao,
         cookies_dao=database.cookies_dao,
+        vaults_dao=database.vaults_dao,
+        user_files_dao=database.user_files_dao,
         logger=logger,
     )
 
@@ -93,7 +104,7 @@ class AppContainer(containers.DeclarativeContainer):
 
     config = providers.Singleton(Settings)
     logger = providers.Singleton(init_logger, "stealer_parser",
-                                 "verbosity_level=INFO")
+                                 "verbosity_level=DEBUG")
 
     database = providers.Container(
         DatabaseContainer,
@@ -124,6 +135,11 @@ class AppContainer(containers.DeclarativeContainer):
             reg.register(Chunker, RegexSeparatorChunker()),
             reg.register(Extractor, KVHeaderExtractor()),
             reg.register(Transformer, AliasGroupingTransformer()),
+            reg.register(Chunker, LineChunker()),
+            reg.register(Extractor, DelimitedLineExtractor()),
+            reg.register(Chunker, FullFileChunker()),
+            reg.register(Extractor, VaultExtractor()),
+            reg.register(Transformer, VaultTransformer()),
         ),
         strategy_registry,
     )

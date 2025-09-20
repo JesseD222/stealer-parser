@@ -14,6 +14,7 @@ from stealer_parser.models import (
     System,
     SystemData,
     Cookie,
+    Vault,
 )
 from stealer_parser.parsing.parsers.cookie_parser import CookieParser
 from stealer_parser.parsing.parsers.password_parser import PasswordParser
@@ -66,26 +67,74 @@ class LeakProcessor:
 
                 try:
                     text = archive.read_file(file_path)
-                    parse_kwargs = {}
                     if isinstance(parser, CookieParser):
                         parse_kwargs = {
                             "filename": file_path,
                             "browser": self._infer_browser(file_path),
                             "profile": self._infer_profile(file_path),
                         }
-                    results = parser.parse(text, **parse_kwargs)
-
-                    if isinstance(parser, PasswordParser):
-                        for cred in results:
+                        cookie_results = parser.parse(text, **parse_kwargs)
+                        for cookie in cookie_results:
+                            system_data.cookies.append(cookie)
+                    elif isinstance(parser, PasswordParser):
+                        cred_results = parser.parse(text)
+                        for cred in cred_results:
                             system_data.credentials.append(cred)
                     elif isinstance(parser, SystemParser):
-                        for info in results:
-                            for key, value in info.items():
-                                if hasattr(system_data.system, key):
-                                    setattr(system_data.system, key, value)
-                    elif isinstance(parser, CookieParser):
-                        for cookie in results:
-                            system_data.cookies.append(cookie)
+                        sys_results = parser.parse(text)
+                        for info in sys_results:
+                            if isinstance(info, dict):
+                                for key, value in info.items():
+                                    if hasattr(system_data.system, key):
+                                        setattr(system_data.system, key, value)
+                    else:
+                        # Configurable parser path: map known types
+                        _kwargs = {"filename": file_path} if parser.__class__.__name__ == "ConfigurableParser" else {}
+                        generic_results = parser.parse(text, **_kwargs)
+                        iterable = generic_results if isinstance(generic_results, list) else [generic_results]
+                        for rec in iterable:
+                            if isinstance(rec, dict) and rec.get("type") == "vault":
+                                # Prefer values captured by definition path_extractors; fallback to inference
+                                rb = rec.get("browser")
+                                rp = rec.get("profile")
+                                vb, vp = (rb or None, rp or None)
+                                if vb is None or vp is None:
+                                    fb, fp = self._infer_vault_browser_profile(file_path)
+                                    vb = vb or fb
+                                    vp = vp or fp
+                                v = Vault(
+                                    vault_type=rec.get("vault_type"),
+                                    title=rec.get("title"),
+                                    url=rec.get("url"),
+                                    username=rec.get("username"),
+                                    password=rec.get("password"),
+                                    notes=rec.get("notes"),
+                                    vault_data=rec.get("vault_data"),
+                                    key_phrase=rec.get("key_phrase"),
+                                    seed_words=rec.get("seed_words"),
+                                    filepath=file_path,
+                                    browser=vb or "unknown",
+                                    profile=vp or "unknown",
+                                )
+                                system_data.vaults.append(v)
+                            elif isinstance(rec, dict) and rec.get("type") == "cookie":
+                                f = rec.get("fields") if isinstance(rec.get("fields"), dict) else rec
+                                if f:
+                                    cb = rec.get("browser") or self._infer_browser(file_path) or "unknown"
+                                    cp = rec.get("profile") or self._infer_profile(file_path) or "unknown"
+                                    cookie = Cookie(
+                                        domain=f.get("domain", ""),
+                                        domain_specified=f.get("domain_specified", ""),
+                                        path=f.get("path", ""),
+                                        secure=f.get("secure", ""),
+                                        expiry=f.get("expiry", ""),
+                                        name=f.get("name", ""),
+                                        value=f.get("value", ""),
+                                        browser=cb,
+                                        profile=cp,
+                                        filepath=file_path,
+                                    )
+                                    system_data.cookies.append(cookie)
 
                     self.logger.debug(f"Successfully parsed {file_path} with {parser.__class__.__name__}")
                 except (BadRarFile) as e:
@@ -127,4 +176,23 @@ class LeakProcessor:
             if part.lower() in ("default", "profile 1", "profile1", "profile 2", "profile2"):
                 return part
         return "unknown"
+
+    def _infer_vault_browser_profile(self, filepath: str) -> tuple[str, str]:
+        # Expected pattern: ROOT/Wallets/BrowserName ProfileName/...
+        parts = filepath.split('/')
+        try:
+            wallet_idx = next(i for i, p in enumerate(parts) if p.lower() == "wallets")
+        except StopIteration:
+            return (self._infer_browser(filepath), self._infer_profile(filepath))
+        # The next segment should be "BrowserName ProfileName"
+        if wallet_idx + 1 < len(parts):
+            combo = parts[wallet_idx + 1]
+            # Try to split last space into browser and profile
+            if " " in combo:
+                browser = combo.split(" ")[0]
+                profile = combo[len(browser) + 1 :]
+                return (browser, profile)
+            # Fallback: treat whole as browser and infer profile normally
+            return (combo, self._infer_profile(filepath))
+        return (self._infer_browser(filepath), self._infer_profile(filepath))
 

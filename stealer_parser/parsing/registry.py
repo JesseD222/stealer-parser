@@ -66,8 +66,12 @@ class ParserRegistry:
         scored.sort(key=lambda x: x[1], reverse=True)
         if scored and scored[0][1] >= threshold:
             best_def = scored[0][0]
+            best_score = scored[0][1]
             parts = self._parser_factory.build_parts(best_def)
             # Pass logger from registry to the configurable parser
+            self.logger.info(
+                f"parser_selection kind=definition-backed def={best_def.key} score={best_score:.3f} file={path}"
+            )
             return ConfigurableParser(logger=self.logger, definition=best_def, parts=parts)
 
         return self.get_parser(str(path))

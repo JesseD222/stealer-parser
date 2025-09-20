@@ -196,7 +196,7 @@ def init_logger(
 
     coloredlogs.install(
         logger=logger,
-        level=verbosity_level,
+        level=10,
         fmt=formatting,
         isatty=True,
     )

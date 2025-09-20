@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from .credential import Credential
 from .cookie import Cookie
 from .system import System
+from .vault import Vault
+from .user_file import UserFile
 from .types import StealerNameType
 
 
@@ -35,6 +37,8 @@ class SystemData:
     system: System | None = None
     credentials: list[Credential] = field(default_factory=list)
     cookies: list[Cookie] = field(default_factory=list)
+    vaults: list[Vault] = field(default_factory=list)
+    user_files: list[UserFile] = field(default_factory=list)
 
     def add_stealer_name(self, stealer_name: StealerNameType) -> None:
         """Add stealer name to every credentials and cookies.

@@ -20,6 +20,7 @@ class RecordDefinition(BaseModel):
     key: str
     description: Optional[str] = None
     file_globs: List[str] = Field(default_factory=list)
+    path_extractors: List[str] = Field(default_factory=list)
     record_separators: List[str] = Field(default_factory=list)
     kv_delimiters: List[str] = Field(default_factory=lambda: [":", "="])
     multiline: bool = True
@@ -35,16 +36,23 @@ class RecordDefinition(BaseModel):
         seps = [re.compile(pat, re.I) for pat in self.record_separators]
         aliases = [re.compile(re.escape(a), re.I) for f in self.fields for a in f.aliases]
         delims = [re.compile(rf"\s*{re.escape(d)}\s*") for d in self.kv_delimiters]
-        return {"headers": headers, "separators": seps, "aliases": aliases, "delims": delims}
+        path_extractors = [re.compile(pat, re.I) for pat in self.path_extractors]
+        return {"headers": headers, "separators": seps, "aliases": aliases, "delims": delims, "path_extractors": path_extractors}
 
     def capabilities(self) -> Set[str]:
         caps: Set[str] = set()
+        # Special-case capability hints by record key
+        if self.key.lower() == "vault":
+            caps.add("vault")
+            caps.add("full-file")
         if self.record_separators:
             caps.add("regex-boundary")
         if any(f.header_patterns for f in self.fields):
             caps.add("kv-headers")
         if self.multiline:
             caps.add("multiline")
+        else:
+            caps.add("line-based")
         if self.groups:
             caps.add("grouping")
         return caps

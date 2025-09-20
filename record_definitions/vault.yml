@@ -1,0 +1,30 @@
+key: vault
+description: Encrypted keystore or wallet artifacts (browser plugins, crypto wallets). Targets LevelDB exports, wallet.dat, keystore JSON, and related markers.
+file_globs:
+  - '**/*wallet.dat'
+  - '**/*electrum*'
+  - '**/*keystore*'
+  - '**/*keychain*'
+  - '**/*mmkv*'
+  - '**/*leveldb/*'
+  - '**/*Local Storage/leveldb/*'
+  - '**/*Local Extension Settings/*'
+  - '**/*extension*/*/leveldb/*'
+  - '**/*.ldb'
+  - '**/*.log'
+record_separators: []
+kv_delimiters: [":", "="]
+multiline: true
+path_extractors:
+  # Match ROOT/Wallets/BrowserName ProfileName/... capturing browser and profile
+  - '(?i).*/wallets/(?P<browser>[^/\s]+)\s+(?P<profile>[^/]+)/.*'
+fields:
+  - name: keystore_marker
+    aliases: ["keystore", "keyring", "key_store", "key store", "encrypted", "ciphertext", "salt", "iv", "kdf", "scrypt", "pbkdf2", "crypto", "version", "mmkv"]
+    header_patterns: ['(?i)\"(ciphertext|salt|iv|kdf|scrypt|pbkdf2|crypto|version)\"\s*:']
+  - name: seed_marker
+    aliases: ["seed", "seed phrase", "mnemonic", "bip39", "recovery phrase", "secret phrase"]
+    header_patterns: ['(?i)\b(seed|mnemonic|bip39|recovery\s+phrase|secret\s+phrase)\b']
+  - name: wallet_marker
+    aliases: ["metamask", "wallet.dat", "electrum", "bitcoin", "phantom", "ronin", "tronlink", "keplr", "ledger", "trezor"]
+    header_patterns: ['(?i)\b(metamask|electrum|wallet\.dat|bitcoin|phantom|ronin|tronlink|keplr|ledger|trezor)\b']

@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 from verboselogs import VerboseLogger
 
 from .dao.base import CookiesDAO, CredentialsDAO, LeaksDAO, SystemsDAO
+from .dao.vault import VaultDAO
+from .dao.user_file import UserFilesDAO
 
 if TYPE_CHECKING:
     from stealer_parser.models.leak import Leak
@@ -30,6 +32,8 @@ class PostgreSQLExporter:
         systems_dao: SystemsDAO,
         credentials_dao: CredentialsDAO,
         cookies_dao: CookiesDAO,
+        vaults_dao: VaultDAO,
+        user_files_dao: UserFilesDAO,
         logger: Optional[VerboseLogger] = None,
     ) -> None:
         """Initialize PostgreSQL exporter.
@@ -58,6 +62,8 @@ class PostgreSQLExporter:
         self.systems_dao = systems_dao
         self.credentials_dao = credentials_dao
         self.cookies_dao = cookies_dao
+        self.vaults_dao = vaults_dao
+        self.user_files_dao = user_files_dao
 
         if not PSYCOPG2_AVAILABLE:
             raise ImportError(
@@ -124,7 +130,7 @@ class PostgreSQLExporter:
         Dict[str, int]
             Statistics of exported data.
         """
-        stats = {"systems": 0, "credentials": 0, "cookies": 0}
+        stats = {"systems": 0, "credentials": 0, "cookies": 0, "vaults": 0, "user_files": 0}
 
         conn = None
         try:
@@ -142,6 +148,12 @@ class PostgreSQLExporter:
 
                 if system_data.cookies:
                     stats["cookies"] += self.cookies_dao.bulk_insert(system_data.cookies, system_id, conn=conn)
+
+                if getattr(system_data, "vaults", None):
+                    stats["vaults"] += self.vaults_dao.bulk_insert(system_data.vaults, system_id, conn=conn)
+
+                if getattr(system_data, "user_files", None):
+                    stats["user_files"] += self.user_files_dao.bulk_insert(system_data.user_files, system_id, conn=conn)
 
             self.leaks_dao.update_counts(leak_id, stats["systems"], conn=conn)
             conn.commit()

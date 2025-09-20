@@ -1,0 +1,29 @@
+key: system
+description: Basic system information (UID, computer name, HWID, user, IP, country, date)
+file_globs: ["**/*system*.txt", "**/*sysinfo*.txt", "**/*system_info*.txt", "**/*pcinfo*.txt", "**/*machine*.txt"]
+record_separators: ["^$", "^-{2,}\\s*$"]
+kv_delimiters: [":"]
+multiline: true
+fields:
+  - name: machine_id
+    aliases: ["uid", "machine id", "id"]
+    header_patterns: ["(?i)^uid\\s*:", "(?i)^machine\\s*id\\s*:"]
+    required: false
+  - name: computer_name
+    aliases: ["computer name", "hostname"]
+    header_patterns: ["(?i)^computer\\s+name\\s*:", "(?i)^hostname\\s*:"]
+  - name: hardware_id
+    aliases: ["hwid", "hardware id"]
+    header_patterns: ["(?i)^hwid\\s*:", "(?i)^hardware\\s*id\\s*:"]
+  - name: machine_user
+    aliases: ["user", "username", "account"]
+    header_patterns: ["(?i)^user\\s*:", "(?i)^username\\s*:"]
+  - name: ip_address
+    aliases: ["ip", "ip address"]
+    header_patterns: ["(?i)^ip\\s*:"]
+  - name: country
+    aliases: ["location", "country"]
+    header_patterns: ["(?i)^country\\s*:"]
+  - name: log_date
+    aliases: ["date", "log date"]
+    header_patterns: ["(?i)^(date|log\\s*date)\\s*:"]

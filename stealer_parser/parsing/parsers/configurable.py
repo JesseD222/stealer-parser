@@ -30,9 +30,22 @@ class ConfigurableParser(Parser):
     def parse(self, text: str, **kwargs) -> list[dict]:
         records: list[dict] = []
         lines = text.splitlines()
+        filename = kwargs.get("filename")
         for chunk in self.parts.chunker.chunk(lines, self.definition):
             raw = self.parts.extractor.extract(chunk, self.definition)
             record = self.parts.transformer.transform(raw, self.definition)
             if record:
+                # Apply path extractors if filename present
+                if filename:
+                    for rx in self.definition.compiled.get("path_extractors", []):
+                        m = rx.search(filename)
+                        if m:
+                            gd = m.groupdict()
+                            # Merge only known fields onto the record's top-level
+                            for k, v in gd.items():
+                                if v is None:
+                                    continue
+                                if k in ("browser", "profile"):
+                                    record[k] = v
                 records.append(record)
         return records
