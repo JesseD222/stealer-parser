@@ -39,7 +39,19 @@ class VaultDAO(BaseDAO):
             str(data.filepath) if data.filepath else None,
             data.stealer_name,
         )
-        return self._execute_query(query, params, conn=conn)
+        return self._execute_query(
+            query,
+            params,
+            conn=conn,
+            ctx={
+                "dao": "VaultDAO",
+                "action": "insert",
+                "table": "vaults",
+                "system_id": system_id,
+                "vault_type": data.vault_type,
+                "filepath": str(data.filepath) if data.filepath else None,
+            },
+        )
 
     def bulk_insert(self, *args: Any, conn=None) -> int:
         data: List[Vault] = args[0]
@@ -71,4 +83,15 @@ class VaultDAO(BaseDAO):
             )
             for v in data
         ]
-        return self._execute_values(query, params, conn=conn)
+        return self._execute_values(
+            query,
+            params,
+            conn=conn,
+            ctx={
+                "dao": "VaultDAO",
+                "action": "bulk_insert",
+                "table": "vaults",
+                "system_id": system_id,
+                "rows": len(data),
+            },
+        )

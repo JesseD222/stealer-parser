@@ -2,7 +2,7 @@
 
 Information stealers are malwares that steal sensitive data, aka **logs**, to be sold in forums or shared in chat groups.
 
-This tool takes a **logs archive**, parses it, and produces a JSON file.
+This tool takes a **logs archive**, parses it, and exports to a PostgreSQL database by default, with optional JSON output.
 
 ## Table of Content
 
@@ -24,8 +24,8 @@ This tool takes a **logs archive**, parses it, and produces a JSON file.
 
 ### Output Options
 
-- **JSON Export** (default): Structured JSON files for easy integration
-- **PostgreSQL Database**: Direct export to PostgreSQL for advanced querying and analysis
+- **PostgreSQL Database** (default): Direct export for advanced querying and analysis
+- **JSON Export** (optional via `--dump-json`): Structured JSON files for easy integration
 
 See [Database Export Documentation](docs/database_export.md) for detailed database setup and usage instructions.
 
@@ -114,7 +114,7 @@ DB_CREATE_TABLES=false
 # Parser
 PREFER_DEFINITION_PARSERS=false
 RECORD_DEFINITIONS_DIRS=record_definitions
-PARSER_MATCH_THRESHOLD=2.0
+PARSER_MATCH_THRESHOLD=0.15
 ```
 
 ## Usage
@@ -136,12 +136,13 @@ options:
   -v, --verbose         increase logs output verbosity (default: info, -v: verbose, -vv: debug, -vvv: spam)
 ```
 
-Basic use:
+Basic use (DB export by default):
 
 ```console
 $ stealer_parser myfile.rar
 2024-07-08 13:37:00 - StealerParser - INFO - Processing: myfile.rar ...
-2024-07-08 13:37:00 - StealerParser - INFO - Successfully wrote 'myfile.json'.
+2024-07-08 13:37:00 - StealerParser - INFO - Exporting myfile.rar to database...
+2024-07-08 13:37:00 - StealerParser - INFO - Database export completed successfully: 3 systems, 192 credentials, 156 cookies, 0 vaults, 0 user_files exported
 ```
 
 Use the verbose option to display extra information:
@@ -150,7 +151,8 @@ Use the verbose option to display extra information:
 $ stealer_parser -vvv myfile.zip
 2024-07-08 13:37:00 - StealerParser - INFO - Processing: myfile.zip ...
 2024-07-08 13:37:00 - StealerParser - DEBUG - Parsed 'myfile.zip' (983 systems).
-2024-07-08 13:37:00 - StealerParser - INFO - Successfully wrote 'myfile.json'.
+2024-07-08 13:37:00 - StealerParser - INFO - Exporting myfile.zip to database...
+2024-07-08 13:37:00 - StealerParser - INFO - Database export completed successfully: ...
 ```
 
 Open password-protected archives:
@@ -159,7 +161,7 @@ Open password-protected archives:
 $ stealer_parser myfile.zip --password mypassword
 ```
 
-Choose output file name:
+Also dump JSON:
 
 ```console
 $ stealer_parser myfile.zip --dump-json results/foo.json
@@ -183,7 +185,7 @@ $ stealer_parser myfile.rar --dump-json ./results/foo.json
 
 ## Documentation
 
-The grammars can be found in the [`docs` directory](docs).
+The grammars and feature docs can be found in the [`docs` directory](docs). See [Database Export Documentation](docs/database_export.md) for DB setup, performance, logging, and troubleshooting.
 
 ## Contributing
 

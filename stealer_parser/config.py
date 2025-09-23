@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     db_create_tables: bool = False
 
     # Parser feature flags and configuration
-    prefer_definition_parsers: bool = False
+    prefer_definition_parsers: bool = True
     record_definitions_dirs: List[str] = ["record_definitions"]
     parser_match_threshold: float = 0.15
     

@@ -26,7 +26,19 @@ class UserFilesDAO(BaseDAO):
             data.detected_patterns,
             data.stealer_name,
         )
-        return self._execute_query(query, params, conn=conn)
+        return self._execute_query(
+            query,
+            params,
+            conn=conn,
+            ctx={
+                "dao": "UserFilesDAO",
+                "action": "insert",
+                "table": "user_files",
+                "system_id": system_id,
+                "file_path": data.file_path,
+                "size": data.file_size,
+            },
+        )
 
     def bulk_insert(self, *args: Any, conn=None) -> int:
         data: List[UserFile] = args[0]
@@ -48,4 +60,15 @@ class UserFilesDAO(BaseDAO):
             )
             for uf in data
         ]
-        return self._execute_values(query, params, conn=conn)
+        return self._execute_values(
+            query,
+            params,
+            conn=conn,
+            ctx={
+                "dao": "UserFilesDAO",
+                "action": "bulk_insert",
+                "table": "user_files",
+                "system_id": system_id,
+                "rows": len(data),
+            },
+        )
